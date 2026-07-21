@@ -79,6 +79,8 @@ private struct StartView: View {
                         .foregroundStyle(.orange)
                 }
 
+                GoalSection()
+
                 Label("Runs stay on this iPhone", systemImage: "lock.fill")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -115,6 +117,7 @@ private struct StartView: View {
 
 private struct RunDashboardView: View {
     @EnvironmentObject private var tracker: RunTracker
+    @EnvironmentObject private var goalStore: GoalStore
 
     private var primaryPace: TimeInterval? {
         tracker.currentMilePace ?? tracker.rollingPace ?? tracker.averagePace
@@ -179,6 +182,14 @@ private struct RunDashboardView: View {
                 MetricCard(title: "LIVE PACE", value: tracker.rollingPace?.paceText ?? "--:--", unit: "/mi")
             }
 
+            if let goal = goalStore.activeGoal {
+                LiveGoalRow(
+                    goal: goal,
+                    distanceMeters: tracker.distanceMeters,
+                    elapsed: tracker.elapsed
+                )
+            }
+
             if let lastSplit = tracker.mileSplits.last {
                 HStack {
                     Label("Mile \(lastSplit.mile)", systemImage: "flag.checkered")
@@ -229,6 +240,7 @@ private struct RunSummaryView: View {
                     .font(.largeTitle.bold())
 
                 if let record {
+                    GoalApplyView(record: record)
                     RunDetailView(record: record, showsDate: false)
                 }
 
@@ -294,6 +306,413 @@ private struct RunDetailView: View {
         }
         .navigationTitle("Run")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct GoalSection: View {
+    @EnvironmentObject private var goalStore: GoalStore
+    @EnvironmentObject private var store: RunStore
+    @State private var isEditing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("GOAL")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .tracking(1.2)
+                Spacer()
+                if goalStore.activeGoal != nil {
+                    Button("Change") { isEditing = true }
+                        .font(.caption.bold())
+                }
+            }
+
+            if let goal = goalStore.activeGoal {
+                GoalProgressCard(goal: goal, records: store.records)
+            } else {
+                Button { isEditing = true } label: {
+                    Label("Set a goal", systemImage: "target")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
+                }
+                Text("Choose a distance and a target time. Add runs to the goal to see how close you are.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .sheet(isPresented: $isEditing) { GoalEditorView() }
+    }
+}
+
+private struct GoalProgressCard: View {
+    let goal: RunGoal
+    let records: [RunRecord]
+
+    private var attempts: [GoalAttempt] {
+        GoalEvaluation.attempts(for: goal, in: records)
+    }
+
+    private var best: GoalAttempt? {
+        attempts.min { $0.goalDistanceDuration < $1.goalDistanceDuration }
+    }
+
+    private var gap: TimeInterval? {
+        best.map { $0.goalDistanceDuration - goal.targetDuration }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                // The distance leads, because the target time is already shown
+                // on the right. Repeating the whole goal title reads as noise.
+                Text(goal.distanceText)
+                    .font(.title3.bold())
+                Spacer()
+                Text(goal.targetDuration.clockText)
+                    .font(.title3.bold().monospacedDigit())
+                    .foregroundStyle(.mint)
+            }
+
+            Text("Target pace \(goal.targetPace.paceText) /mi")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if let best, let gap {
+                Divider().overlay(.white.opacity(0.15))
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("BEST SO FAR")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.secondary)
+                        Text(best.goalDistanceDuration.clockText)
+                            .font(.headline.monospacedDigit())
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text(gap <= 0 ? "RESULT" : "TO GO")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.secondary)
+                        Text(gap <= 0 ? "Reached" : gap.differenceText)
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(gap <= 0 ? .mint : .orange)
+                    }
+                }
+
+                Text(attempts.count == 1 ? "1 run added" : "\(attempts.count) runs added")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No runs added yet. Finish a run, then add it to this goal.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(18)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+private struct GoalEditorView: View {
+    @EnvironmentObject private var goalStore: GoalStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var miles = 2.0
+    @State private var minutes = 12
+    @State private var seconds = 0
+
+    private let mileOptions: [Double] = [0.5, 1, 1.5, 2, 3, 3.1, 4, 5, 6, 6.2, 8, 10, 13.1, 26.2]
+
+    private var targetDuration: TimeInterval {
+        TimeInterval(minutes * 60 + seconds)
+    }
+
+    private var targetPace: TimeInterval {
+        guard miles > 0 else { return 0 }
+        return targetDuration / miles
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                VStack(spacing: 18) {
+                    Text("Pick a distance and the time you want to run it in.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Picker("Distance", selection: $miles) {
+                        ForEach(mileOptions, id: \.self) { option in
+                            Text(label(for: option)).tag(option)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(height: 110)
+
+                    HStack(spacing: 4) {
+                        Picker("Minutes", selection: $minutes) {
+                            ForEach(0..<240, id: \.self) { Text("\($0)").tag($0) }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(width: 80, height: 130)
+                        Text("min").foregroundStyle(.secondary)
+
+                        Picker("Seconds", selection: $seconds) {
+                            ForEach(0..<60, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(width: 80, height: 130)
+                        Text("sec").foregroundStyle(.secondary)
+                    }
+
+                    if targetDuration > 0 {
+                        Text("Target pace \(targetPace.paceText) /mi")
+                            .font(.headline)
+                            .foregroundStyle(.mint)
+                    }
+
+                    Spacer()
+                }
+                .padding(20)
+            }
+            .navigationTitle("Set a goal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save", action: save)
+                        .disabled(targetDuration <= 0)
+                }
+            }
+        }
+    }
+
+    private func label(for option: Double) -> String {
+        if abs(option.rounded() - option) < 0.01 {
+            return String(format: "%.0f mi", option)
+        }
+        return String(format: "%.1f mi", option)
+    }
+
+    /// Only one goal is active at a time, so saving a new goal archives the old
+    /// one. Its runs stay attached to it, so the history is not lost.
+    private func save() {
+        if let existing = goalStore.activeGoal {
+            goalStore.archive(existing)
+        }
+        goalStore.add(
+            RunGoal(
+                title: "\(label(for: miles)) in \(targetDuration.clockText)",
+                distanceMeters: miles * metersPerMile,
+                targetDuration: targetDuration
+            )
+        )
+        dismiss()
+    }
+}
+
+private struct LiveGoalRow: View {
+    let goal: RunGoal
+    let distanceMeters: Double
+    let elapsed: TimeInterval
+
+    private var projection: TimeInterval? {
+        PacePrediction.liveProjection(distanceMeters: distanceMeters, elapsed: elapsed, goal: goal)
+    }
+
+    private var delta: TimeInterval? {
+        projection.map { $0 - goal.targetDuration }
+    }
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(goal.title.uppercased())
+                    .font(.caption2.bold())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(projection.map { "Projected \($0.clockText)" } ?? "Projection settles shortly")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 3) {
+                Text(delta.map { $0 <= 0 ? "AHEAD BY" : "BEHIND BY" } ?? "TARGET")
+                    .font(.caption2.bold())
+                    .foregroundStyle(.secondary)
+                Text(delta?.differenceText ?? goal.targetDuration.clockText)
+                    .font(.title3.bold().monospacedDigit())
+                    .foregroundStyle(deltaColor)
+            }
+        }
+        .padding()
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var deltaColor: Color {
+        guard let delta else { return .secondary }
+        return delta <= 0 ? .mint : .orange
+    }
+}
+
+private struct GoalApplyView: View {
+    let record: RunRecord
+
+    @EnvironmentObject private var goalStore: GoalStore
+    @EnvironmentObject private var store: RunStore
+
+    var body: some View {
+        if let goal = goalStore.activeGoal {
+            if goalStore.contains(runID: record.id, in: goal),
+               let current = goalStore.goal(withID: goal.id),
+               let outcome = GoalEvaluation.outcome(forRunID: record.id, goal: current, records: store.records) {
+                GoalOutcomeBlurb(
+                    outcome: outcome,
+                    attempts: GoalEvaluation.attempts(for: current, in: store.records)
+                )
+            } else {
+                Button {
+                    goalStore.attach(runID: record.id, to: goal)
+                } label: {
+                    Label("Add to \(goal.title)", systemImage: "target")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.mint.opacity(0.18), in: RoundedRectangle(cornerRadius: 18))
+                        .foregroundStyle(.mint)
+                }
+                .accessibilityHint("Counts this run towards your goal and shows how close you were")
+            }
+        }
+    }
+}
+
+/// The summary shown once a run joins a goal: the result against the target,
+/// then the movement against the previous run and the best run before it.
+private struct GoalOutcomeBlurb: View {
+    let outcome: GoalOutcome
+    let attempts: [GoalAttempt]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                // A personal best is good news even when the target is still
+                // ahead, so it does not get the warning colour.
+                Image(systemName: outcome.reachedTarget ? "checkmark.seal.fill" : "target")
+                    .foregroundStyle(isGoodNews ? .mint : .orange)
+                Text(headline)
+                    .font(.headline)
+            }
+
+            Text(resultLine)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().overlay(.white.opacity(0.15))
+
+            Text(comparisonLine)
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let progressLine {
+                Text(progressLine)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !outcome.attempt.isDirectAttempt {
+                Text(estimateNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var isGoodNews: Bool {
+        outcome.reachedTarget || (outcome.isPersonalBest && !outcome.isFirstAttempt)
+    }
+
+    private var headline: String {
+        if outcome.reachedTarget { return "Goal reached" }
+        if outcome.isPersonalBest && !outcome.isFirstAttempt { return "Your best yet" }
+        return "Added to \(outcome.goal.title)"
+    }
+
+    private var resultLine: String {
+        let distance = String(format: "%.2f mi", outcome.attempt.distanceMeters / metersPerMile)
+        let actual = outcome.attempt.duration.clockText
+
+        if outcome.attempt.isDirectAttempt {
+            return "You ran \(distance) in \(actual)."
+        }
+        let equivalent = outcome.attempt.goalDistanceDuration.clockText
+        return "You ran \(distance) in \(actual). That is worth about \(equivalent) for \(outcome.goal.distanceText)."
+    }
+
+    private var comparisonLine: String {
+        let target = outcome.goal.targetDuration.clockText
+        let gap = outcome.deltaToTarget.differenceText
+
+        if outcome.reachedTarget {
+            return "That beats your \(target) target by \(gap)."
+        }
+
+        var line = "That is \(gap) off your \(target) target."
+
+        if outcome.isFirstAttempt {
+            return line + " This is your first run for this goal."
+        }
+
+        if let toPrevious = outcome.deltaToPrevious {
+            if toPrevious < 0 {
+                line += " You took \(toPrevious.differenceText) off your last run."
+            } else if toPrevious > 0 {
+                line += " That is \(toPrevious.differenceText) slower than your last run."
+            } else {
+                line += " That matches your last run."
+            }
+        }
+
+        if outcome.isPersonalBest {
+            line += " It is also your best run for this goal."
+        } else if let toBest = outcome.deltaToBestBefore, let best = outcome.bestBefore {
+            line += " Your best is still \(best.goalDistanceDuration.clockText), by \(toBest.differenceText)."
+        }
+
+        return line
+    }
+
+    /// Progress is measured against the runner's own first attempt. MilePace has
+    /// no population data and does not need any: the useful question is whether
+    /// this runner is closing their own gap.
+    private var progressLine: String? {
+        guard attempts.count >= 2,
+              let fraction = outcome.progressFraction(firstAttempt: attempts.first),
+              fraction > 0 else { return nil }
+        let percent = Int((fraction * 100).rounded())
+        return "You have closed \(percent)% of the gap since your first run for this goal."
+    }
+
+    private var estimateNote: String {
+        let base = "This run was not \(outcome.goal.distanceText), so the comparison uses Riegel's formula to estimate the equivalent time."
+        return outcome.attempt.isDependable
+            ? base
+            : base + " The distance was far from the goal, so treat it as a rough guide."
     }
 }
 

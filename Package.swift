@@ -14,13 +14,14 @@ let package = Package(
             exclude: [
                 "Assets.xcassets",
                 "ContentView.swift",
+                "GoalStore.swift",
                 "Info.plist",
                 "MilePaceApp.swift",
                 "PrivacyInfo.xcprivacy",
                 "RunStore.swift",
                 "RunTracker.swift"
             ],
-            sources: ["Models.swift", "RunAccumulator.swift"]
+            sources: ["Models.swift", "PacePrediction.swift", "RunAccumulator.swift"]
         )
     ]
 )
