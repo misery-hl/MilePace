@@ -295,8 +295,7 @@ private struct RunDetailView: View {
 private struct RunShareButton: View {
     let record: RunRecord
 
-    @State private var activityItems: [Any] = []
-    @State private var isSharing = false
+    @State private var shareItem: ShareItem?
     @State private var renderFailed = false
 
     var body: some View {
@@ -311,9 +310,8 @@ private struct RunShareButton: View {
                 .foregroundStyle(.black)
         }
         .accessibilityHint("Creates a MilePace summary image and opens the iOS share sheet")
-        .sheet(isPresented: $isSharing) {
-            ActivityView(activityItems: activityItems)
-                .presentationDetents([.medium, .large])
+        .sheet(item: $shareItem) { item in
+            ActivityView(activityItems: [item.image, item.caption])
         }
         .alert("Couldn’t create share image", isPresented: $renderFailed) {
             Button("OK", role: .cancel) {}
@@ -340,9 +338,14 @@ private struct RunShareButton: View {
         let pace = record.averagePace?.paceText ?? "--:--"
         let caption = "I ran \(distance) miles in \(record.activeDuration.clockText) at \(pace)/mi with MilePace — a free, open-source running app. https://github.com/misery-hl/MilePace"
 
-        activityItems = [image, caption]
-        isSharing = true
+        shareItem = ShareItem(image: image, caption: caption)
     }
+}
+
+private struct ShareItem: Identifiable {
+    let id = UUID()
+    let image: UIImage
+    let caption: String
 }
 
 private struct RunShareCard: View {
