@@ -284,10 +284,208 @@ private struct RunDetailView: View {
                     }
                 }
             }
+
+            RunShareButton(record: record)
         }
         .navigationTitle("Run")
         .navigationBarTitleDisplayMode(.inline)
     }
+}
+
+private struct RunShareButton: View {
+    let record: RunRecord
+
+    @State private var activityItems: [Any] = []
+    @State private var isSharing = false
+    @State private var renderFailed = false
+
+    var body: some View {
+        Button {
+            shareRun()
+        } label: {
+            Label("Share Run", systemImage: "square.and.arrow.up")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(.white, in: RoundedRectangle(cornerRadius: 18))
+                .foregroundStyle(.black)
+        }
+        .accessibilityHint("Creates a MilePace summary image and opens the iOS share sheet")
+        .sheet(isPresented: $isSharing) {
+            ActivityView(activityItems: activityItems)
+                .presentationDetents([.medium, .large])
+        }
+        .alert("Couldn’t create share image", isPresented: $renderFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Please try sharing the run again.")
+        }
+    }
+
+    @MainActor
+    private func shareRun() {
+        let card = RunShareCard(record: record)
+            .frame(width: 1_080, height: 1_350)
+
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 1
+        renderer.isOpaque = true
+
+        guard let image = renderer.uiImage else {
+            renderFailed = true
+            return
+        }
+
+        let distance = String(format: "%.2f", record.distanceMiles)
+        let pace = record.averagePace?.paceText ?? "--:--"
+        let caption = "I ran \(distance) miles in \(record.activeDuration.clockText) at \(pace)/mi with MilePace — a free, open-source running app. https://github.com/misery-hl/MilePace"
+
+        activityItems = [image, caption]
+        isSharing = true
+    }
+}
+
+private struct RunShareCard: View {
+    let record: RunRecord
+
+    private var completedMilesText: String {
+        let count = record.mileSplits.count
+        return count == 1 ? "1 completed mile" : "\(count) completed miles"
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.015, green: 0.065, blue: 0.050),
+                    Color(red: 0.025, green: 0.15, blue: 0.11)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Circle()
+                .fill(Color.mint.opacity(0.12))
+                .frame(width: 760, height: 760)
+                .offset(x: 420, y: -520)
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 24) {
+                    Image(systemName: "figure.run")
+                        .font(.system(size: 60, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(width: 112, height: 112)
+                        .background(.mint, in: Circle())
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("MilePace")
+                            .font(.system(size: 62, weight: .bold, design: .rounded))
+                        Text("RUN COMPLETE")
+                            .font(.system(size: 27, weight: .bold))
+                            .tracking(5)
+                            .foregroundStyle(.mint)
+                    }
+                }
+
+                Spacer()
+
+                Text(String(format: "%.2f", record.distanceMiles))
+                    .font(.system(size: 224, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.75)
+                    .lineLimit(1)
+
+                Text("MILES")
+                    .font(.system(size: 42, weight: .bold))
+                    .tracking(10)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 20) {
+                    ShareMetric(
+                        title: "ACTIVE TIME",
+                        value: record.activeDuration.clockText,
+                        unit: ""
+                    )
+                    ShareMetric(
+                        title: "AVG PACE",
+                        value: record.averagePace?.paceText ?? "--:--",
+                        unit: "/mi"
+                    )
+                    ShareMetric(
+                        title: "FASTEST MILE",
+                        value: record.fastestMile?.duration.paceText ?? "--:--",
+                        unit: record.fastestMile == nil ? "" : "/mi"
+                    )
+                }
+                .padding(.top, 54)
+
+                Spacer()
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(record.startedAt.formatted(date: .long, time: .omitted))
+                            .font(.system(size: 31, weight: .semibold))
+                        Text(completedMilesText)
+                            .font(.system(size: 25, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 10) {
+                        Text("NO SUBSCRIPTION")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundStyle(.mint)
+                        Text("github.com/misery-hl/MilePace")
+                            .font(.system(size: 22, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(82)
+        }
+        .clipped()
+    }
+}
+
+private struct ShareMetric: View {
+    let title: String
+    let value: String
+    let unit: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.system(size: 21, weight: .bold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(value)
+                    .font(.system(size: 55, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(.system(size: 23, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(28)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 28))
+    }
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private struct MetricCard: View {
