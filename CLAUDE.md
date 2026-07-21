@@ -4,6 +4,31 @@ Last updated: 2026-07-20
 
 This file is the source-of-truth handoff for continuing MilePace with Claude Code. Read it before editing, and update it when the facts below stop being true.
 
+## How to write responses
+
+Write all responses to the user in ASD-STE100 Simplified Technical English. This is the AeroSpace and Defence Simplified Technical English standard. It is a controlled language. It removes ambiguity from technical writing.
+
+Obey these rules:
+
+- Use one word for one meaning. Do not use a word as more than one part of speech.
+- Write procedural sentences with a maximum of 20 words. Write descriptive sentences with a maximum of 25 words.
+- Give one instruction in one sentence.
+- Use the active voice. Use the passive voice only when the agent is not important.
+- Use the simple present, past, or future tense. Do not use a gerund or a participle in place of a verb.
+- Keep the articles. Write "the map" and not "map".
+- Do not make a noun cluster of more than three words.
+- Write a maximum of six sentences in a paragraph.
+- Put the most important information first.
+- Do not remove words to make the text short. Short text that is not clear is a failure.
+
+Do not apply the standard to these items:
+
+- Code, identifiers, file paths, and commands.
+- Quoted tool output and error messages.
+- Commit messages and pull request text. These keep the conventions in this file.
+
+The standard makes text clear. It does not make text abrupt. Answer the full question.
+
 ## Product intent
 
 MilePace is a deliberately small, local-first iPhone running app. Its primary job is to let a runner glance at a stable mile pace without a Strava subscription.
