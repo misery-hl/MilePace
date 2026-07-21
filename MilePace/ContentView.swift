@@ -1,4 +1,5 @@
 import CoreLocation
+import MapKit
 import SwiftUI
 import UIKit
 
@@ -255,6 +256,10 @@ private struct RunDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            if record.hasRoute {
+                RouteMapView(record: record)
+            }
+
             HStack(spacing: 10) {
                 MetricCard(title: "DISTANCE", value: String(format: "%.2f", record.distanceMiles), unit: "mi")
                 MetricCard(title: "TIME", value: record.activeDuration.clockText, unit: "active")
@@ -289,6 +294,86 @@ private struct RunDetailView: View {
         }
         .navigationTitle("Run")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct RouteMapView: View {
+    let record: RunRecord
+
+    var body: some View {
+        Map(initialPosition: .region(region), interactionModes: [.pan, .zoom]) {
+            ForEach(Array(record.routeSegments.enumerated()), id: \.offset) { _, segment in
+                MapPolyline(coordinates: segment.map(\.coordinate))
+                    .stroke(
+                        .mint,
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
+                    )
+            }
+
+            if let start = record.trackPoints.first {
+                Annotation("Start", coordinate: start.coordinate) {
+                    RouteEndpoint(fill: .mint)
+                }
+                .annotationTitles(.hidden)
+            }
+
+            if let end = record.trackPoints.last {
+                Annotation("Finish", coordinate: end.coordinate) {
+                    RouteEndpoint(fill: .white)
+                }
+                .annotationTitles(.hidden)
+            }
+        }
+        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+        .environment(\.colorScheme, .dark)
+        .frame(height: 260)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+        }
+        .accessibilityLabel("Map of your run route")
+    }
+
+    /// Frames the whole route with a margin, and keeps a floor on the span so a
+    /// very short run does not zoom in to a meaningless level of detail.
+    private var region: MKCoordinateRegion {
+        guard let bounds = record.routeBounds else {
+            return MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 0, longitude: 0),
+                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            )
+        }
+
+        return MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: bounds.centerLatitude,
+                longitude: bounds.centerLongitude
+            ),
+            span: MKCoordinateSpan(
+                latitudeDelta: max(bounds.latitudeSpan * 1.4, 0.0025),
+                longitudeDelta: max(bounds.longitudeSpan * 1.4, 0.0025)
+            )
+        )
+    }
+}
+
+private struct RouteEndpoint: View {
+    let fill: Color
+
+    var body: some View {
+        Circle()
+            .fill(fill)
+            .frame(width: 16, height: 16)
+            .overlay {
+                Circle().strokeBorder(.black.opacity(0.75), lineWidth: 3)
+            }
+    }
+}
+
+private extension TrackPoint {
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 }
 

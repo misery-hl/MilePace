@@ -7,6 +7,7 @@ MilePace is a deliberately small, local-only iPhone running app. It uses the iPh
 - current-mile projected pace
 - rolling 30-second pace
 - automatic mile splits and local run history
+- a dark route map of the run you just finished
 - branded post-run image sharing through the native iOS share sheet
 
 There is no account, subscription, analytics SDK, ad SDK, or backend. Run history is stored only in the app's local Application Support directory.
@@ -15,7 +16,7 @@ There is no account, subscription, analytics SDK, ad SDK, or backend. Run histor
 
 1. Open `MilePace.xcodeproj` in Xcode.
 2. Select the **MilePace** target, then **Signing & Capabilities**.
-3. Choose your Apple Developer team and replace `com.example.MilePace` with a bundle identifier you control.
+3. Choose your Apple Developer team and replace `com.misery.MilePace` with a bundle identifier you control.
 4. Connect your iPhone, select it as the run destination, and press Run.
 5. Accept **While Using the App** and leave **Precise Location** enabled.
 
