@@ -187,7 +187,7 @@ final class RunTracker: NSObject, ObservableObject {
     }
 }
 
-extension RunTracker: CLLocationManagerDelegate {
+extension RunTracker: @preconcurrency CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
         usesReducedAccuracy = manager.accuracyAuthorization == .reducedAccuracy
