@@ -129,6 +129,57 @@ struct RunRecord: Codable, Equatable, Identifiable {
     }
 }
 
+/// A target time for a target distance, plus the runs the user applied to it.
+///
+/// The goal owns the list of run identifiers rather than each run naming a goal.
+/// A run can therefore be added to a goal long after it was recorded, and a run
+/// that is never applied stays untouched.
+struct RunGoal: Codable, Equatable, Identifiable {
+    let id: UUID
+    let createdAt: Date
+    var title: String
+    let distanceMeters: Double
+    let targetDuration: TimeInterval
+    var runIDs: [UUID]
+    var isArchived: Bool
+
+    init(
+        id: UUID = UUID(),
+        createdAt: Date = Date(),
+        title: String,
+        distanceMeters: Double,
+        targetDuration: TimeInterval,
+        runIDs: [UUID] = [],
+        isArchived: Bool = false
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.title = title
+        self.distanceMeters = distanceMeters
+        self.targetDuration = targetDuration
+        self.runIDs = runIDs
+        self.isArchived = isArchived
+    }
+
+    var distanceMiles: Double {
+        distanceMeters / metersPerMile
+    }
+
+    /// The pace the runner must hold to reach the target.
+    var targetPace: TimeInterval {
+        guard distanceMeters > 0 else { return 0 }
+        return targetDuration / distanceMeters * metersPerMile
+    }
+
+    var distanceText: String {
+        let miles = distanceMiles
+        if abs(miles.rounded() - miles) < 0.01 {
+            return String(format: "%.0f mi", miles)
+        }
+        return String(format: "%.2f mi", miles)
+    }
+}
+
 enum RunPhase: Equatable {
     case idle
     case running
@@ -154,5 +205,17 @@ extension TimeInterval {
         guard isFinite, self > 0, self < 3_600 else { return "--:--" }
         let roundedSeconds = Int(rounded())
         return String(format: "%d:%02d", roundedSeconds / 60, roundedSeconds % 60)
+    }
+
+    /// The size of a difference, without a sign. The caller supplies the wording
+    /// that says which direction it went, because "1:20 faster" reads better
+    /// than "-1:20" on a summary screen.
+    var differenceText: String {
+        guard isFinite else { return "--:--" }
+        let seconds = Int(abs(self).rounded())
+        if seconds >= 3_600 {
+            return String(format: "%d:%02d:%02d", seconds / 3_600, (seconds % 3_600) / 60, seconds % 60)
+        }
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }

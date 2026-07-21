@@ -13,6 +13,8 @@
 		B00000000000000000000004 /* RunAccumulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000004 /* RunAccumulator.swift */; };
 		B00000000000000000000005 /* RunStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000005 /* RunStore.swift */; };
 		B00000000000000000000006 /* RunTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000006 /* RunTracker.swift */; };
+		B0000000000000000000000B /* PacePrediction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000E /* PacePrediction.swift */; };
+		B0000000000000000000000C /* GoalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000F /* GoalStore.swift */; };
 		B00000000000000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* Assets.xcassets */; };
 		B00000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000009 /* RunAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000A /* RunAccumulatorTests.swift */; };
@@ -36,6 +38,8 @@
 		A00000000000000000000004 /* RunAccumulator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunAccumulator.swift; sourceTree = "<group>"; };
 		A00000000000000000000005 /* RunStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunStore.swift; sourceTree = "<group>"; };
 		A00000000000000000000006 /* RunTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunTracker.swift; sourceTree = "<group>"; };
+		A0000000000000000000000E /* PacePrediction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacePrediction.swift; sourceTree = "<group>"; };
+		A0000000000000000000000F /* GoalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoalStore.swift; sourceTree = "<group>"; };
 		A00000000000000000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00000000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A00000000000000000000009 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -82,6 +86,8 @@
 				A00000000000000000000003 /* Models.swift */,
 				A00000000000000000000004 /* RunAccumulator.swift */,
 				A00000000000000000000005 /* RunStore.swift */,
+				A0000000000000000000000F /* GoalStore.swift */,
+				A0000000000000000000000E /* PacePrediction.swift */,
 				A00000000000000000000006 /* RunTracker.swift */,
 				A00000000000000000000007 /* Assets.xcassets */,
 				A00000000000000000000008 /* Info.plist */,
@@ -220,6 +226,8 @@
 				B00000000000000000000003 /* Models.swift in Sources */,
 				B00000000000000000000004 /* RunAccumulator.swift in Sources */,
 				B00000000000000000000005 /* RunStore.swift in Sources */,
+				B0000000000000000000000C /* GoalStore.swift in Sources */,
+				B0000000000000000000000B /* PacePrediction.swift in Sources */,
 				B00000000000000000000006 /* RunTracker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

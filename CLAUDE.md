@@ -104,6 +104,7 @@ The user wants proper source control, not direct commits to `main`:
 - Local JSON run history in Application Support.
 - Recent-run detail views with average pace and mile splits.
 - **Recorded GPS route persisted per run, and a dark route map on saved runs.**
+- **Goals: a target time for a distance, a live projected finish, and a summary comparing each added run with the target, the previous run, and the best run.**
 - Post-run social share card and native iOS share sheet.
 - Privacy manifest declaring no tracking or collected/transmitted data.
 - 1024x1024 opaque app icon and an icon-generation utility.
@@ -121,8 +122,12 @@ The user wants proper source control, not direct commits to `main`:
   - Pure pace and split math. Keep this independent from Core Location so it remains directly testable.
 - `MilePace/Models.swift`
   - `RunRecord`, `MileSplit`, `TrackPoint`, `RouteBounds`, formatting, and the meters-per-mile constant. **Keep this free of Core Location and MapKit** — coordinates are stored as plain `Double`s specifically so `Tools/VerifyPaceEngine.swift` can compile it with bare `swiftc`.
+- `MilePace/PacePrediction.swift`
+  - Riegel race prediction, goal attempts, and goal comparison. **Keep this free of frameworks** for the same reason as `Models.swift`.
 - `MilePace/RunStore.swift`
   - Local JSON persistence.
+- `MilePace/GoalStore.swift`
+  - Local JSON persistence for goals, in `goals.json`.
 - `MilePaceTests/RunAccumulatorTests.swift`
   - XCTest coverage for pace and split calculations.
 - `Tools/VerifyPaceEngine.swift`
@@ -219,6 +224,24 @@ Expected output includes:
 Passed 5 pace-engine checks
 ```
 
+Check the race prediction and goal comparison:
+
+```sh
+swiftc \
+  MilePace/Models.swift \
+  MilePace/PacePrediction.swift \
+  Tools/VerifyGoalEngine.swift \
+  -o /private/tmp/milepace-goal-check
+
+/private/tmp/milepace-goal-check
+```
+
+Expected output includes:
+
+```text
+Passed 34 goal-engine checks
+```
+
 Also run:
 
 ```sh
@@ -268,6 +291,9 @@ Prioritize in this order unless the user changes direction:
 
 1. Validate a real outdoor run end to end: distance, live pace stability, exact mile split, pause/resume, screen lock, battery, and how live GPS noise reads when the route is drawn. If the line looks jittery, consider light smoothing or a tighter accuracy threshold on recorded points.
 2. Fix the overlapping start/finish markers on loop routes.
+   Also consider finding the exact time at the goal distance from the stored
+   trackpoints, for runs that go past it. That is more accurate than the Riegel
+   estimate the goal comparison uses now.
 3. Add GPX export and a share/save workflow, mapping `segment` to GPX track segments. This doubles as the backup path that protects against container wipes.
 4. Replace the GitHub URL in the share caption with an App Store or TestFlight link once one exists.
 5. Prepare TestFlight metadata and distribution after the physical run gate passes.

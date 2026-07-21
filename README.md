@@ -8,6 +8,7 @@ MilePace is a deliberately small, local-only iPhone running app. It uses the iPh
 - rolling 30-second pace
 - automatic mile splits and local run history
 - a dark route map of the run you just finished
+- goals with a live projected finish time, and a summary of how each run compares
 - branded post-run image sharing through the native iOS share sheet
 
 There is no account, subscription, analytics SDK, ad SDK, or backend. Run history is stored only in the app's local Application Support directory.

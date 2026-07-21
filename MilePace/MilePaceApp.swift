@@ -5,6 +5,7 @@ struct MilePaceApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var runStore: RunStore
     @StateObject private var runTracker: RunTracker
+    @StateObject private var goalStore = GoalStore()
 
     init() {
         let store = RunStore()
@@ -17,6 +18,7 @@ struct MilePaceApp: App {
             ContentView()
                 .environmentObject(runStore)
                 .environmentObject(runTracker)
+                .environmentObject(goalStore)
                 .preferredColorScheme(.dark)
         }
         .onChange(of: scenePhase) { _, newPhase in
