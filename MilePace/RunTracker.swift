@@ -28,6 +28,8 @@ final class RunTracker: NSObject, ObservableObject {
     private var accumulatedActiveDuration: TimeInterval = 0
     private var previousLocation: CLLocation?
     private var previousLocationElapsed: TimeInterval?
+    private var trackPoints: [TrackPoint] = []
+    private var segmentIndex = 0
 
     init(store: RunStore) {
         self.store = store
@@ -76,6 +78,7 @@ final class RunTracker: NSObject, ObservableObject {
     func resume() {
         guard phase == .paused else { return }
         activeSegmentStartedAt = Date()
+        segmentIndex += 1
         phase = .running
         previousLocation = nil
         previousLocationElapsed = nil
@@ -102,7 +105,8 @@ final class RunTracker: NSObject, ObservableObject {
             endedAt: Date(),
             distanceMeters: accumulator.totalDistanceMeters,
             activeDuration: accumulatedActiveDuration,
-            mileSplits: accumulator.mileSplits
+            mileSplits: accumulator.mileSplits,
+            trackPoints: trackPoints
         )
         store.save(record)
         lastRun = record
@@ -137,6 +141,8 @@ final class RunTracker: NSObject, ObservableObject {
         accumulatedActiveDuration = 0
         previousLocation = nil
         previousLocationElapsed = nil
+        trackPoints = []
+        segmentIndex = 0
         lastRun = nil
         phase = .running
         resetPublishedMetrics()
@@ -212,6 +218,17 @@ extension RunTracker: @preconcurrency CLLocationManagerDelegate {
 
             let locationElapsed = activeElapsed(at: location.timestamp)
             guard locationElapsed >= accumulatedActiveDuration else { continue }
+
+            trackPoints.append(
+                TrackPoint(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    timestamp: location.timestamp,
+                    altitude: location.verticalAccuracy > 0 ? location.altitude : nil,
+                    horizontalAccuracy: location.horizontalAccuracy,
+                    segment: segmentIndex
+                )
+            )
 
             guard let previousLocation, let previousLocationElapsed else {
                 self.previousLocation = location
