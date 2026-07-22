@@ -104,7 +104,7 @@ The user wants proper source control, not direct commits to `main`:
 - Local JSON run history in Application Support.
 - Recent-run detail views with average pace and mile splits.
 - **Recorded GPS route persisted per run, and a dark route map on saved runs.**
-- **Goals: several at once, each a target time for a distance. Add, edit, and delete them, with a confirmation that states what is lost. A live projected finish for the goal being followed, and a summary comparing each added run with the target, the previous run, and the best run.**
+- **Goals: several at once, each a target time for a distance in miles, kilometres, meters, or yards. Add, edit, and delete them, with a confirmation that states what is lost. A live projected finish for the goal being followed, and a summary comparing each added run with the target, the previous run, and the best run.**
 - Post-run social share card and native iOS share sheet.
 - Privacy manifest declaring no tracking or collected/transmitted data.
 - 1024x1024 opaque app icon and an icon-generation utility.
@@ -240,7 +240,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 62 goal-engine checks
+Passed 81 goal-engine checks
 ```
 
 Also run:

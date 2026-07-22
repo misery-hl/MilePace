@@ -570,7 +570,8 @@ private struct GoalEditorView: View {
     @EnvironmentObject private var store: RunStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var miles: Double
+    @State private var distanceMeters: Double
+    @State private var unit: DistanceUnit
     @State private var mode: EntryMode
     @State private var minutes: Int
     @State private var seconds: Int
@@ -587,26 +588,31 @@ private struct GoalEditorView: View {
         var id: String { rawValue }
     }
 
-    private let mileOptions: [Double] = [0.25, 0.5, 1, 1.5, 2, 3, 3.1, 4, 5, 6, 6.2, 8, 10, 13.1, 20, 26.2]
-
     init(goal: RunGoal?) {
         self.goal = goal
 
-        let distance = goal.map { $0.distanceMeters / metersPerMile } ?? 2
+        let meters = goal?.distanceMeters ?? (2 * metersPerMile)
+        let startingUnit = goal?.distanceUnit ?? .miles
+        let miles = meters / metersPerMile
         let total = goal?.targetDuration ?? 720
         // Longer goals open in pace mode, because that is how runners say them.
-        let startsInPace = distance >= 6
-        let shown = startsInPace ? total / distance : total
+        let startsInPace = miles >= 6
+        let shown = startsInPace ? total / miles : total
 
         // Round once, then split. Truncating the minutes while rounding the
         // seconds loses a whole minute whenever the seconds carry: 359.5 s
         // became 5 min 00 s rather than 6 min 00 s, silently shrinking the goal.
         let wholeSeconds = Int(shown.rounded())
 
-        _miles = State(initialValue: distance)
+        _distanceMeters = State(initialValue: startingUnit.nearestOption(toMeters: meters))
+        _unit = State(initialValue: startingUnit)
         _mode = State(initialValue: startsInPace ? .pace : .totalTime)
         _minutes = State(initialValue: wholeSeconds / 60)
         _seconds = State(initialValue: wholeSeconds % 60)
+    }
+
+    private var miles: Double {
+        distanceMeters / metersPerMile
     }
 
     private var enteredSeconds: TimeInterval {
@@ -632,9 +638,16 @@ private struct GoalEditorView: View {
                 Color.black.ignoresSafeArea()
 
                 VStack(spacing: 16) {
-                    Picker("Distance", selection: $miles) {
-                        ForEach(mileOptions, id: \.self) { option in
-                            Text(label(for: option)).tag(option)
+                    Picker("Distance unit", selection: $unit) {
+                        ForEach(DistanceUnit.allCases) { option in
+                            Text(option.shortName).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Picker("Distance", selection: $distanceMeters) {
+                        ForEach(unit.options, id: \.self) { option in
+                            Text(unit.text(forMeters: option)).tag(option)
                         }
                     }
                     .pickerStyle(.wheel)
@@ -672,7 +685,7 @@ private struct GoalEditorView: View {
                                  : "Target pace \(targetPace.paceText) /mi")
                                 .font(.headline)
                                 .foregroundStyle(.mint)
-                            Text(label(for: miles) + " in " + targetDuration.clockText)
+                            Text(unit.text(forMeters: distanceMeters) + " in " + targetDuration.clockText)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -710,6 +723,11 @@ private struct GoalEditorView: View {
             .onChange(of: mode) { previous, _ in
                 convertEnteredValue(from: previous)
             }
+            .onChange(of: unit) { _, newUnit in
+                // Snap to the closest distance the new unit offers, so changing
+                // unit re-states the same goal instead of resetting it.
+                distanceMeters = newUnit.nearestOption(toMeters: distanceMeters)
+            }
             .alert("Delete this goal?", isPresented: $isConfirmingDelete) {
                 Button("Delete goal", role: .destructive) {
                     if let goal { goalStore.delete(goal) }
@@ -745,13 +763,6 @@ private struct GoalEditorView: View {
         seconds = wholeSeconds % 60
     }
 
-    private func label(for option: Double) -> String {
-        if abs(option.rounded() - option) < 0.01 {
-            return String(format: "%.0f mi", option)
-        }
-        return String(format: "%.2f mi", option)
-    }
-
     private func save() {
         // A second tap during the dismiss animation would otherwise mint a
         // second goal with a new identifier and identical values.
@@ -760,13 +771,15 @@ private struct GoalEditorView: View {
 
         if var existing = goal {
             // Editing keeps runIDs, so correcting a target never costs history.
-            existing.distanceMeters = miles * metersPerMile
+            existing.distanceMeters = distanceMeters
             existing.targetDuration = targetDuration
+            existing.distanceUnit = unit
             goalStore.update(existing)
         } else {
             let created = RunGoal(
-                distanceMeters: miles * metersPerMile,
-                targetDuration: targetDuration
+                distanceMeters: distanceMeters,
+                targetDuration: targetDuration,
+                distanceUnit: unit
             )
             goalStore.add(created)
             // Only adopt the new goal if the runner was not already following
