@@ -144,6 +144,7 @@ The user wants proper source control, not direct commits to `main`:
 Two design points worth preserving:
 
 - Points are only recorded for fixes that already pass the tracker's accuracy filters, so poor GPS is not drawn.
+- The route is thinned by `RouteThinning` when the run is saved. Fixes arrive every 2 m, which the distance maths needs but the stored route does not. Without thinning a 150-run history reached 76.9 MB and blocked the main thread for 1.5 s on every save. Thinning keeps the first and last point of every segment, so the route still starts and ends where the runner did and a pause still reads as a gap.
 - `segment` increments on **resume**. `routeSegments` groups by it so the drawn route breaks at a pause instead of connecting where the runner stopped to where they started again.
 
 `RouteMapView` renders it: dark standard map with points of interest excluded, mint route line, start and finish markers, framed by `routeBounds` with a margin and a minimum span so a very short run does not zoom absurdly.
@@ -239,7 +240,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 40 goal-engine checks
+Passed 62 goal-engine checks
 ```
 
 Also run:
@@ -284,6 +285,17 @@ The bundle identifier is now `com.misery.MilePace` and should stay stable.
 **Changing the bundle identifier creates a new app identity.** When it changed from `com.example.MilePace`, iOS installed a second, separate app rather than updating the first, and the run recorded in the old app stayed in the old app's container. Switching between TestFlight and Xcode builds of the *same* identifier also forces a fresh install because the signing differs, which wipes the container. Consecutive Xcode rebuilds of the same identifier update in place and preserve run history.
 
 Because history is local-first with no backup by design, a container wipe is unrecoverable. This is a real argument for shipping an export or backup path before asking the user to accumulate runs they would miss.
+
+## Known open defects
+
+Five agents walked user stories through the code on 2026-07-21. Fifteen findings were fixed. These were verified and are **not** fixed yet:
+
+1. **Reduced Accuracy kills tracking silently.** The fix filter in `RunTracker` rejects anything worse than 35 m horizontal accuracy. Under iOS Reduced Accuracy, Core Location returns hundreds to thousands of meters, so nearly every fix is dropped. Distance stays at 0.00 for the whole run and looks like GPS warming up. The only warning appears before the run starts. Detect sustained rejection during a run and say so.
+2. **Persistence failures are silent.** `RunStore.load` and `persist` both use `try?` with no fallback. A failed write loses the run with no signal. A corrupt or unreadable file decodes as an empty history, which is indistinguishable from a new install. Surface both.
+3. **A manual clock change over two minutes stops tracking.** `didUpdateLocations` drops any fix whose timestamp is more than 120 s from now, and never reports it. A pure timezone change is safe; all timing uses UTC dates.
+4. **Goal targets have no plausibility bound.** A 5 km goal with a 1 second target saves and displays "Target pace 0:00 /mi".
+5. **A "best so far" from an unreliable estimate is shown as fact.** `GoalCard` picks the minimum equivalent time with no regard for `isDirectAttempt` or `isDependable`. `GoalOutcomeBlurb` caveats the estimate once, when the run is added, but the goal card then shows it plainly forever.
+6. **History still grows without bound.** Route thinning cut a 150-run history from 76.9 MB to 8.9 MB, and the encode from 1.50 s to 0.15 s, but the whole file is still rewritten on every save. If the history gets much larger, move to one file per run, or an index with lazily loaded routes.
 
 ## Recommended next work
 

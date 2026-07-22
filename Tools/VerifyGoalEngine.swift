@@ -126,6 +126,76 @@ enum VerifyGoalEngine {
         check(GoalEvaluation.attempts(for: edited, in: records).count == 3, "edited goal still evaluates its runs")
         check(nearly(edited.targetPace, 345), "an edited target changes the pace")
 
+        // A pace of an hour or more per mile is slow but real. Blanking it hid
+        // the largest number on the running screen whenever a runner stopped
+        // mid-mile without pausing.
+        check((3_599.0 as TimeInterval).paceText == "59:59", "a pace just under an hour formats")
+        check((3_600.0 as TimeInterval).paceText == "1:00:00", "a pace of exactly an hour formats")
+        check((3_661.0 as TimeInterval).paceText == "1:01:01", "a pace over an hour formats")
+        check((0.0 as TimeInterval).paceText == "--:--", "a zero pace is still blank")
+        check((-5.0 as TimeInterval).paceText == "--:--", "a negative pace is still blank")
+
+        // The projection must stop once the goal distance is behind the runner.
+        // Riegel scaled downwards keeps improving as the run continues, which
+        // describes a performance that already finished.
+        check(PacePrediction.liveProjection(
+            distanceMeters: twoMiles + 1, elapsed: 900, goal: goal) == nil,
+            "no live projection once the goal distance is passed")
+        check(PacePrediction.liveProjection(
+            distanceMeters: twoMiles - 100, elapsed: 700, goal: goal) != nil,
+            "a live projection exists just before the goal distance")
+        check(PacePrediction.hasPassedGoalDistance(distanceMeters: twoMiles, goal: goal),
+              "reaching the goal distance counts as passed")
+        check(!PacePrediction.hasPassedGoalDistance(distanceMeters: 500, goal: goal),
+              "a short run has not passed the goal distance")
+
+        // Progress must not claim credit the runner has not earned.
+        let fastFirstID = UUID(), slowLaterID = UUID()
+        var beatenGoal = RunGoal(distanceMeters: metersPerMile, targetDuration: 300)
+        beatenGoal.runIDs = [fastFirstID, slowLaterID]
+        let beatenRecords = [
+            run(id: fastFirstID, meters: metersPerMile, seconds: 290, day: 0),
+            run(id: slowLaterID, meters: metersPerMile, seconds: 360, day: 4)
+        ]
+        let beatenAttempts = GoalEvaluation.attempts(for: beatenGoal, in: beatenRecords)
+        guard let regression = GoalEvaluation.outcome(
+            forRunID: slowLaterID, goal: beatenGoal, records: beatenRecords) else {
+            fputs("Failed: regression outcome missing\n", stderr)
+            exit(1)
+        }
+        check(regression.deltaToTarget > 0, "the later run missed the target")
+        check(regression.progressFraction(firstAttempt: beatenAttempts.first) == nil,
+              "a run that misses reports no progress when the first attempt already won")
+        guard let firstWin = GoalEvaluation.outcome(
+            forRunID: fastFirstID, goal: beatenGoal, records: beatenRecords) else {
+            fputs("Failed: first-win outcome missing\n", stderr)
+            exit(1)
+        }
+        check(firstWin.progressFraction(firstAttempt: beatenAttempts.first) == 1,
+              "a run that meets the target reports full progress")
+
+        // Thinning keeps the shape of a route and the boundaries of a pause.
+        var dense: [TrackPoint] = []
+        for i in 0..<4_000 {
+            dense.append(TrackPoint(
+                latitude: 40 + Double(i) * 0.00001, longitude: -75,
+                timestamp: Date(timeIntervalSince1970: 1_780_000_000 + Double(i)),
+                altitude: nil, horizontalAccuracy: 5, segment: i < 2_000 ? 0 : 1))
+        }
+        let thinned = RouteThinning.thin(dense)
+        check(thinned.count < dense.count, "a dense route is thinned")
+        check(thinned.count <= RouteThinning.maximumPoints + 8, "thinning respects the limit")
+        check(thinned.first == dense.first, "thinning keeps the first point")
+        check(thinned.last == dense.last, "thinning keeps the last point")
+        check(thinned.contains(dense[1_999]), "thinning keeps the end of a segment")
+        check(thinned.contains(dense[2_000]), "thinning keeps the start of the next segment")
+        check(Set(thinned.map(\.segment)) == [0, 1], "thinning keeps both segments")
+        check(zip(thinned, thinned.dropFirst()).allSatisfy { $0.timestamp <= $1.timestamp },
+              "thinning keeps the points in order")
+        let sparse = Array(dense.prefix(20))
+        check(RouteThinning.thin(sparse) == sparse, "a short route is left alone")
+        check(RouteThinning.thin([]).isEmpty, "an empty route stays empty")
+
         // Formatting and derived values.
         check((-84.0 as TimeInterval).differenceText == "1:24", "difference text drops the sign")
         check((0.0 as TimeInterval).differenceText == "0:00", "difference text handles zero")
