@@ -19,14 +19,48 @@ final class GoalStore: ObservableObject {
         load()
     }
 
-    /// The goal a new run measures itself against. The app keeps one goal active
-    /// at a time, so the live screen never has to ask which one the runner means.
-    var activeGoal: RunGoal? {
-        goals.first { !$0.isArchived }
+    /// Every goal the runner is currently working on. A runner can hold several
+    /// at once, such as a mile, a two mile, and a half marathon.
+    var activeGoals: [RunGoal] {
+        goals.filter { !$0.isArchived }
     }
+
+    /// The goal the live screen follows during a run.
+    ///
+    /// Only one goal can be shown while running, because the running screen has
+    /// to stay glanceable. The runner picks which one. If they have not picked,
+    /// or the picked goal is gone, this falls back to the first active goal.
+    var trackedGoal: RunGoal? {
+        if let trackedGoalID,
+           let match = activeGoals.first(where: { $0.id == trackedGoalID }) {
+            return match
+        }
+        return activeGoals.first
+    }
+
+    var trackedGoalID: UUID? {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: Self.trackedKey) else { return nil }
+            return UUID(uuidString: raw)
+        }
+        set {
+            UserDefaults.standard.set(newValue?.uuidString, forKey: Self.trackedKey)
+            objectWillChange.send()
+        }
+    }
+
+    private static let trackedKey = "MilePace.trackedGoalID"
 
     func add(_ goal: RunGoal) {
         goals.insert(goal, at: 0)
+        persist()
+    }
+
+    /// Replaces the target of an existing goal. The runs already added stay
+    /// attached, so correcting a goal never costs the runner their history.
+    func update(_ goal: RunGoal) {
+        guard let index = goals.firstIndex(where: { $0.id == goal.id }) else { return }
+        goals[index] = goal
         persist()
     }
 
@@ -36,8 +70,11 @@ final class GoalStore: ObservableObject {
         persist()
     }
 
+    /// Removes the goal and the run associations on it. The runs themselves live
+    /// in the run history and are not touched.
     func delete(_ goal: RunGoal) {
         goals.removeAll { $0.id == goal.id }
+        if trackedGoalID == goal.id { trackedGoalID = nil }
         persist()
     }
 

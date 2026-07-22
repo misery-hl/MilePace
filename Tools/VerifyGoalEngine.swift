@@ -13,7 +13,7 @@ enum VerifyGoalEngine {
 
     static func main() {
         let twoMiles = 2 * metersPerMile
-        let goal = RunGoal(title: "2 mi in 12:00", distanceMeters: twoMiles, targetDuration: 720)
+        let goal = RunGoal(distanceMeters: twoMiles, targetDuration: 720)
 
         // Riegel: doubling the distance costs more than doubling the time.
         let fromMile = PacePrediction.equivalentDuration(
@@ -105,6 +105,26 @@ enum VerifyGoalEngine {
         let met = GoalEvaluation.outcome(forRunID: fastID, goal: metGoal, records: metRecords)
         check(met?.reachedTarget == true, "a fast enough run reaches the target")
         check((met?.deltaToTarget ?? 0) < 0, "beating the target gives a negative delta")
+
+        // Goals saved before the title became derived still carry a title key.
+        // Decoding must ignore it rather than fail the whole goals file.
+        let legacyGoalJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-00000000000A","createdAt":770000000,
+        "title":"stale name","distanceMeters":3218.688,"targetDuration":720,
+        "runIDs":[],"isArchived":false}]
+        """
+        let legacyGoals = try? JSONDecoder().decode([RunGoal].self, from: Data(legacyGoalJSON.utf8))
+        check(legacyGoals?.count == 1, "a goal saved with a title key still decodes")
+        check(legacyGoals?.first?.targetDuration == 720, "the legacy target survives")
+        check(legacyGoals?.first?.title == "2 mi in 12:00", "the title is derived, not the stale stored one")
+
+        // Editing a goal keeps the runs already added to it.
+        var edited = populated
+        edited.targetDuration = 690
+        edited.distanceMeters = 2 * metersPerMile
+        check(edited.runIDs.count == 3, "editing a goal keeps its runs")
+        check(GoalEvaluation.attempts(for: edited, in: records).count == 3, "edited goal still evaluates its runs")
+        check(nearly(edited.targetPace, 345), "an edited target changes the pace")
 
         // Formatting and derived values.
         check((-84.0 as TimeInterval).differenceText == "1:24", "difference text drops the sign")
