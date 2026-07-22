@@ -166,6 +166,41 @@ struct RunRecord: Codable, Equatable, Identifiable {
     }
 }
 
+/// What kind of effort a goal describes.
+///
+/// A run and a sprint are stated in different units, and only one of them has a
+/// meaningful pace per mile. Splitting them keeps each editor short and stops
+/// the app offering a pace per mile for a 40 yard dash.
+///
+/// This is derived from the unit rather than stored, so no saved goal needs to
+/// change and there is no way for the two to disagree.
+enum GoalKind: String, CaseIterable, Identifiable, Equatable {
+    case run
+    case sprint
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .run: return "Run"
+        case .sprint: return "Sprint"
+        }
+    }
+
+    var units: [DistanceUnit] {
+        switch self {
+        case .run: return [.miles, .kilometers]
+        case .sprint: return [.meters, .yards]
+        }
+    }
+
+    /// A pace per mile describes a run. Over a sprint it is a number nobody
+    /// races to, so a sprint goal is stated as a total time only.
+    var allowsPaceEntry: Bool {
+        self == .run
+    }
+}
+
 /// The unit a goal distance is stated in.
 ///
 /// A goal is always stored in meters. This only decides the steps the picker
@@ -200,17 +235,24 @@ enum DistanceUnit: String, Codable, CaseIterable, Identifiable, Equatable {
         }
     }
 
+    var kind: GoalKind {
+        switch self {
+        case .miles, .kilometers: return .run
+        case .meters, .yards: return .sprint
+        }
+    }
+
     /// One step on the picker, in meters.
     ///
-    /// Miles and kilometres step by a tenth, which is fine enough for any road
-    /// target. Meters step by 50, which lands exactly on the track distances
-    /// people race: 400, 800, 1500, 5000. Yards step by 10, which is fine
-    /// enough for a sprint and still lands on 100, 220, 440, 880, and 1760.
+    /// Road units step by a tenth, which is fine enough for any run target.
+    /// Sprint units step finely, because the distances are short and a few
+    /// meters matter: 5 m lands on 55, 60, 100, 200, 400; 10 yd lands on the
+    /// 40 yard dash and on 100, 220, 440, 880.
     var stepMeters: Double {
         switch self {
         case .miles: return metersPerMile / 10
         case .kilometers: return 100
-        case .meters: return 50
+        case .meters: return 5
         case .yards: return 0.9144 * 10
         }
     }
@@ -228,16 +270,15 @@ enum DistanceUnit: String, Codable, CaseIterable, Identifiable, Equatable {
 
     /// How many steps the picker offers.
     ///
-    /// Miles, kilometres, and meters all reach beyond a marathon. Yards stop at
-    /// 5,000, because yards describe sprints and imperial track distances;
-    /// anyone setting a longer goal is thinking in miles or kilometres, and a
-    /// wheel long enough for a marathon in yards would be unusable.
+    /// Run units reach well past a marathon. Sprint units stop at roughly a
+    /// mile — 1,600 m and 1,760 yd — because that is about as far as anyone
+    /// sprints, and a short wheel is far easier to use than a long one.
     var stepCount: Int {
         switch self {
         case .miles: return 500        // 50.0 mi
         case .kilometers: return 800   // 80.0 km
-        case .meters: return 844       // 42,200 m
-        case .yards: return 497        // 40 yd to 5,000 yd
+        case .meters: return 320       // 5 m to 1,600 m
+        case .yards: return 173        // 40 yd to 1,760 yd
         }
     }
 
@@ -327,10 +368,21 @@ struct RunGoal: Codable, Equatable, Identifiable {
         distanceMeters / metersPerMile
     }
 
+    var kind: GoalKind {
+        distanceUnit.kind
+    }
+
     /// The pace the runner must hold to reach the target.
+    ///
+    /// Only meaningful for a run. A sprint target of 5 seconds over 40 yards is
+    /// a 3:40 mile pace, which is true and useless.
     var targetPace: TimeInterval {
         guard distanceMeters > 0 else { return 0 }
         return targetDuration / distanceMeters * metersPerMile
+    }
+
+    var showsPace: Bool {
+        kind.allowsPaceEntry
     }
 
     var distanceText: String {
