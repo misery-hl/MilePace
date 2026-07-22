@@ -166,6 +166,92 @@ struct RunRecord: Codable, Equatable, Identifiable {
     }
 }
 
+/// The unit a goal distance is stated in.
+///
+/// A goal is always stored in meters. This only decides the steps the picker
+/// offers and how the distance reads back, so a runner who thinks in
+/// kilometres is not shown 3.11 mi, and a runner who thinks in track laps is
+/// not shown 0.2 mi.
+///
+/// Pace stays in minutes per mile everywhere, which is what the app is for.
+enum DistanceUnit: String, Codable, CaseIterable, Identifiable, Equatable {
+    case miles
+    case kilometers
+    case meters
+    case yards
+
+    var id: String { rawValue }
+
+    var shortName: String {
+        switch self {
+        case .miles: return "mi"
+        case .kilometers: return "km"
+        case .meters: return "m"
+        case .yards: return "yd"
+        }
+    }
+
+    var metersPerUnit: Double {
+        switch self {
+        case .miles: return metersPerMile
+        case .kilometers: return 1_000
+        case .meters: return 1
+        case .yards: return 0.9144
+        }
+    }
+
+    /// One step on the picker, in meters.
+    ///
+    /// Miles and kilometres step by a tenth, which is fine enough for any road
+    /// target. Meters and yards step by 50, which lands exactly on the track
+    /// distances people actually race: 400, 800, 1500, 5000.
+    var stepMeters: Double {
+        switch self {
+        case .miles: return metersPerMile / 10
+        case .kilometers: return 100
+        case .meters: return 50
+        case .yards: return 0.9144 * 50
+        }
+    }
+
+    /// How many steps the picker offers. Each unit reaches beyond a marathon.
+    var stepCount: Int {
+        switch self {
+        case .miles: return 500        // 50.0 mi
+        case .kilometers: return 800   // 80.0 km
+        case .meters: return 844       // 42,200 m
+        case .yards: return 924        // 46,200 yd
+        }
+    }
+
+    var usesDecimal: Bool {
+        self == .miles || self == .kilometers
+    }
+
+    /// The distance written in this unit, without a trailing ".0".
+    func text(forMeters meters: Double) -> String {
+        let value = meters / metersPerUnit
+        if usesDecimal {
+            if abs(value.rounded() - value) < 0.05 {
+                return String(format: "%.0f %@", value.rounded(), shortName)
+            }
+            return String(format: "%.1f %@", value, shortName)
+        }
+        return String(format: "%.0f %@", value.rounded(), shortName)
+    }
+
+    /// Every distance the picker offers, in meters.
+    var options: [Double] {
+        (1...stepCount).map { Double($0) * stepMeters }
+    }
+
+    /// The offered distance closest to a given one, so switching unit keeps the
+    /// goal the runner already had instead of resetting it.
+    func nearestOption(toMeters meters: Double) -> Double {
+        options.min { abs($0 - meters) < abs($1 - meters) } ?? stepMeters
+    }
+}
+
 /// A target time for a target distance, plus the runs the user applied to it.
 ///
 /// The goal owns the list of run identifiers rather than each run naming a goal.
@@ -179,6 +265,8 @@ struct RunGoal: Codable, Equatable, Identifiable {
     var targetDuration: TimeInterval
     var runIDs: [UUID]
     var isArchived: Bool
+    /// The unit this goal is stated in. Display only; the distance is meters.
+    var distanceUnit: DistanceUnit
 
     init(
         id: UUID = UUID(),
@@ -186,7 +274,8 @@ struct RunGoal: Codable, Equatable, Identifiable {
         distanceMeters: Double,
         targetDuration: TimeInterval,
         runIDs: [UUID] = [],
-        isArchived: Bool = false
+        isArchived: Bool = false,
+        distanceUnit: DistanceUnit = .miles
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -194,6 +283,21 @@ struct RunGoal: Codable, Equatable, Identifiable {
         self.targetDuration = targetDuration
         self.runIDs = runIDs
         self.isArchived = isArchived
+        self.distanceUnit = distanceUnit
+    }
+
+    /// Decodes `distanceUnit` leniently, so goals saved before units existed
+    /// keep loading instead of failing the whole goals file. They were all in
+    /// miles, which is the default.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        distanceMeters = try container.decode(Double.self, forKey: .distanceMeters)
+        targetDuration = try container.decode(TimeInterval.self, forKey: .targetDuration)
+        runIDs = try container.decodeIfPresent([UUID].self, forKey: .runIDs) ?? []
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+        distanceUnit = try container.decodeIfPresent(DistanceUnit.self, forKey: .distanceUnit) ?? .miles
     }
 
     /// Derived rather than stored, so editing a goal cannot leave a stale name
@@ -213,11 +317,7 @@ struct RunGoal: Codable, Equatable, Identifiable {
     }
 
     var distanceText: String {
-        let miles = distanceMiles
-        if abs(miles.rounded() - miles) < 0.01 {
-            return String(format: "%.0f mi", miles)
-        }
-        return String(format: "%.2f mi", miles)
+        distanceUnit.text(forMeters: distanceMeters)
     }
 }
 

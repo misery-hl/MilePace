@@ -196,6 +196,48 @@ enum VerifyGoalEngine {
         check(RouteThinning.thin(sparse) == sparse, "a short route is left alone")
         check(RouteThinning.thin([]).isEmpty, "an empty route stays empty")
 
+        // Distance units: even steps, exact conversion, and no odd intervals.
+        check(DistanceUnit.miles.options.count == 500, "the mile picker offers 500 steps")
+        check(nearly(DistanceUnit.miles.options[0], metersPerMile / 10, tolerance: 0.001),
+              "the first mile step is a tenth of a mile")
+        check(DistanceUnit.miles.text(forMeters: 3.1 * metersPerMile) == "3.1 mi",
+              "a 5 km distance reads as 3.1 mi")
+        check(DistanceUnit.miles.text(forMeters: 2 * metersPerMile) == "2 mi",
+              "a whole number of miles drops the decimal")
+        check(DistanceUnit.kilometers.text(forMeters: 5_000) == "5 km", "5000 m reads as 5 km")
+        check(DistanceUnit.meters.text(forMeters: 400) == "400 m", "400 m reads exactly")
+        check(DistanceUnit.yards.text(forMeters: 0.9144 * 220) == "220 yd", "220 yd reads exactly")
+
+        // Every step is the same size, which is what the curated list got wrong.
+        let mileSteps = DistanceUnit.miles.options
+        let gaps = zip(mileSteps, mileSteps.dropFirst()).map { $1 - $0 }
+        check(gaps.allSatisfy { nearly($0, metersPerMile / 10, tolerance: 0.001) },
+              "every mile step is the same size")
+
+        // Track distances are reachable exactly.
+        for distance in [400.0, 800.0, 1_500.0, 5_000.0, 10_000.0] {
+            check(DistanceUnit.meters.options.contains { nearly($0, distance, tolerance: 0.001) },
+                  "\(Int(distance)) m is on the picker")
+        }
+
+        // Switching unit keeps the goal rather than resetting it.
+        let fiveKm = 5_000.0
+        let asMiles = DistanceUnit.miles.nearestOption(toMeters: fiveKm)
+        check(abs(asMiles - fiveKm) < metersPerMile / 20, "5 km maps to the nearest mile step")
+        check(DistanceUnit.miles.text(forMeters: asMiles) == "3.1 mi", "and that step reads as 3.1 mi")
+        check(nearly(DistanceUnit.kilometers.nearestOption(toMeters: fiveKm), fiveKm, tolerance: 0.001),
+              "5 km is exact in kilometres")
+
+        // Goals saved before units existed still load, and read as miles.
+        let unitlessJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-00000000000B","createdAt":770000000,
+        "distanceMeters":3218.688,"targetDuration":720,"runIDs":[],"isArchived":false}]
+        """
+        let unitless = try? JSONDecoder().decode([RunGoal].self, from: Data(unitlessJSON.utf8))
+        check(unitless?.count == 1, "a goal saved without a unit still decodes")
+        check(unitless?.first?.distanceUnit == .miles, "a goal without a unit defaults to miles")
+        check(unitless?.first?.title == "2 mi in 12:00", "and still reads the same")
+
         // Formatting and derived values.
         check((-84.0 as TimeInterval).differenceText == "1:24", "difference text drops the sign")
         check((0.0 as TimeInterval).differenceText == "0:00", "difference text handles zero")
