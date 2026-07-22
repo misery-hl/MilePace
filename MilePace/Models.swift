@@ -385,6 +385,33 @@ struct RunGoal: Codable, Equatable, Identifiable {
         kind.allowsPaceEntry
     }
 
+    /// Average speed the target demands, in meters per second.
+    var targetSpeed: Double {
+        guard targetDuration > 0 else { return .infinity }
+        return distanceMeters / targetDuration
+    }
+
+    /// Whether a human could hold this target.
+    ///
+    /// Checked as a speed rather than a pace, so one rule covers a 40 yard dash
+    /// and a marathon. The upper bound sits just above the fastest sprint ever
+    /// recorded, about 12.4 m/s; the lower bound sits below a slow walk. This
+    /// only rejects the absurd, such as a 5 km in one second, which used to
+    /// save happily and then report a target pace of "0:00 /mi".
+    var isPlausible: Bool {
+        targetDuration > 0 && distanceMeters > 0 && targetSpeed <= 13 && targetSpeed >= 0.3
+    }
+
+    var implausibleReason: String? {
+        guard !isPlausible else { return nil }
+        if targetDuration <= 0 || distanceMeters <= 0 {
+            return "Choose a distance and a time."
+        }
+        return targetSpeed > 13
+            ? "That is faster than anyone has ever run. Give yourself more time."
+            : "That is slower than a walk. Try less time."
+    }
+
     var distanceText: String {
         distanceUnit.text(forMeters: distanceMeters)
     }

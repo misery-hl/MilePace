@@ -42,6 +42,14 @@ struct ContentView: View {
             } message: {
                 Text(tracker.errorMessage ?? "")
             }
+            .alert("Run history problem", isPresented: Binding(
+                get: { store.storageError != nil },
+                set: { if !$0 { store.storageError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(store.storageError ?? "")
+            }
         }
     }
 }
@@ -254,6 +262,17 @@ private struct RunDashboardView: View {
                 MetricCard(title: "LIVE PACE", value: tracker.rollingPace?.paceText ?? "--:--", unit: "/mi")
             }
 
+            if let warning = tracker.trackingWarning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 14))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Tracking problem. \(warning)")
+            }
+
             if let goal = goalStore.trackedGoal {
                 LiveGoalRow(
                     goal: goal,
@@ -461,6 +480,21 @@ private struct GoalCard: View {
         best.map { $0.goalDistanceDuration - goal.targetDuration }
     }
 
+    /// A sprint has no useful pace per mile, so the card names the kind instead
+    /// of printing a number nobody races to.
+    private var subtitle: String {
+        guard goal.showsPace else { return "Sprint target" }
+        return "Target pace \(goal.targetPace.paceText) /mi"
+    }
+
+    private var bestLabel: String {
+        best?.isDirectAttempt == false ? "BEST, ESTIMATED" : "BEST SO FAR"
+    }
+
+    private var bestLabelColor: Color {
+        best?.isDirectAttempt == false ? .orange : .secondary
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -481,11 +515,7 @@ private struct GoalCard: View {
             }
 
             HStack {
-                // A sprint has no useful pace per mile, so the card names the
-                // kind instead of printing a number nobody races to.
-                Text(goal.showsPace
-                     ? "Target pace \(goal.targetPace.paceText) /mi"
-                     : "Sprint target")
+                Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -508,9 +538,17 @@ private struct GoalCard: View {
 
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("BEST SO FAR")
+                        // A best that came from a scaled run is an estimate,
+                        // and the card is where it is read from then on. The
+                        // summary caveats it once; without this the number
+                        // reads as measured fact forever after.
+                        // A best that came from a scaled run is an estimate,
+                        // and the card is where it is read from then on. The
+                        // summary caveats it once; without this the number
+                        // reads as measured fact forever after.
+                        Text(bestLabel)
                             .font(.caption2.bold())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(bestLabelColor)
                         Text(best.goalDistanceDuration.clockText)
                             .font(.headline.monospacedDigit())
                     }
@@ -637,6 +675,11 @@ private struct GoalEditorView: View {
         return targetDuration / miles
     }
 
+    /// The goal as currently entered, so the editor can judge it before saving.
+    private var candidate: RunGoal {
+        RunGoal(distanceMeters: distanceMeters, targetDuration: targetDuration, distanceUnit: unit)
+    }
+
     private var summaryHeadline: String {
         // A sprint is stated as a time. Showing it a pace per mile would be
         // true and useless: a 5 second 40 yard dash is a 3:40 mile pace.
@@ -722,6 +765,14 @@ private struct GoalEditorView: View {
                         }
                     }
 
+                    if let reason = candidate.implausibleReason, targetDuration > 0 {
+                        Label(reason, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     if goal != nil {
                         Divider().overlay(.white.opacity(0.15)).padding(.top, 4)
                         Button(role: .destructive) {
@@ -748,7 +799,7 @@ private struct GoalEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
-                        .disabled(targetDuration <= 0 || isSaving)
+                        .disabled(!candidate.isPlausible || isSaving)
                 }
             }
             .onChange(of: mode) { previous, _ in

@@ -290,6 +290,27 @@ enum VerifyGoalEngine {
         check(unitless?.first?.distanceUnit == .miles, "a goal without a unit defaults to miles")
         check(unitless?.first?.title == "2 mi in 12:00", "and still reads the same")
 
+        // Only the absurd is rejected. Checked as a speed so one rule covers
+        // a 40 yard dash and a marathon.
+        check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).isPlausible,
+              "a 2 mi in 12:00 is plausible")
+        check(RunGoal(distanceMeters: 0.9144 * 40, targetDuration: 4, distanceUnit: .yards).isPlausible,
+              "a 4 second 40 yard dash is plausible")
+        check(RunGoal(distanceMeters: 42_195, targetDuration: 7_200).isPlausible,
+              "a two hour marathon is plausible")
+        check(!RunGoal(distanceMeters: 5_000, targetDuration: 1).isPlausible,
+              "a 5 km in one second is rejected")
+        check(!RunGoal(distanceMeters: 42_195, targetDuration: 60).isPlausible,
+              "a one minute marathon is rejected")
+        check(!RunGoal(distanceMeters: metersPerMile, targetDuration: 36_000).isPlausible,
+              "a ten hour mile is rejected")
+        check(!RunGoal(distanceMeters: twoMiles, targetDuration: 0).isPlausible,
+              "a zero target is rejected")
+        check(RunGoal(distanceMeters: 5_000, targetDuration: 1).implausibleReason != nil,
+              "an implausible goal explains itself")
+        check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).implausibleReason == nil,
+              "a plausible goal has nothing to explain")
+
         // Formatting and derived values.
         check((-84.0 as TimeInterval).differenceText == "1:24", "difference text drops the sign")
         check((0.0 as TimeInterval).differenceText == "0:00", "difference text handles zero")

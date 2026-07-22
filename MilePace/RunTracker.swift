@@ -17,6 +17,10 @@ final class RunTracker: NSObject, ObservableObject {
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
     @Published private(set) var usesReducedAccuracy = false
     @Published var errorMessage: String?
+    /// Shown on the running screen while fixes are being rejected. A banner
+    /// rather than an alert, because a runner should not have to dismiss
+    /// something mid-run.
+    @Published private(set) var trackingWarning: String?
 
     private let locationManager = CLLocationManager()
     private let store: RunStore
@@ -30,6 +34,31 @@ final class RunTracker: NSObject, ObservableObject {
     private var previousLocationElapsed: TimeInterval?
     private var trackPoints: [TrackPoint] = []
     private var segmentIndex = 0
+    private var lastAcceptedFixAt: Date?
+    private var lastRejectionReason: FixRejection?
+
+    /// Why a GPS fix was discarded. Each one is silent on its own, and each one
+    /// can persist for a whole run, so the runner has to be told.
+    enum FixRejection {
+        case reducedAccuracy
+        case poorAccuracy
+        case staleTimestamp
+
+        var message: String {
+            switch self {
+            case .reducedAccuracy:
+                return "Precise Location is off, so MilePace cannot measure this run. Turn it on in Settings."
+            case .poorAccuracy:
+                return "GPS is not accurate enough to measure this run yet. Try open sky."
+            case .staleTimestamp:
+                return "The device clock does not match the GPS time, so fixes are being ignored."
+            }
+        }
+    }
+
+    /// How long fixes may be rejected before the runner is told. Long enough to
+    /// ride out a tunnel or a tall building, short enough to matter.
+    private let rejectionWarningDelay: TimeInterval = 30
 
     init(store: RunStore) {
         self.store = store
@@ -146,6 +175,9 @@ final class RunTracker: NSObject, ObservableObject {
         previousLocationElapsed = nil
         trackPoints = []
         segmentIndex = 0
+        lastAcceptedFixAt = nil
+        lastRejectionReason = nil
+        trackingWarning = nil
         lastRun = nil
         phase = .running
         resetPublishedMetrics()
@@ -177,6 +209,24 @@ final class RunTracker: NSObject, ObservableObject {
     private func stopTimer() {
         timer?.invalidate()
         timer = nil
+    }
+
+    private func noteAcceptedFix() {
+        lastAcceptedFixAt = Date()
+        lastRejectionReason = nil
+        trackingWarning = nil
+    }
+
+    private func noteRejectedFix(_ reason: FixRejection) {
+        lastRejectionReason = reason
+
+        // Warn only once fixes have been rejected for a sustained period,
+        // measured from the last good fix, or from the start if there never
+        // was one.
+        guard let since = lastAcceptedFixAt ?? activeSegmentStartedAt else { return }
+        if Date().timeIntervalSince(since) >= rejectionWarningDelay {
+            trackingWarning = reason.message
+        }
     }
 
     private func activeElapsed(at date: Date) -> TimeInterval {
@@ -215,12 +265,22 @@ extension RunTracker: @preconcurrency CLLocationManagerDelegate {
         let splitCountBeforeUpdate = accumulator.mileSplits.count
 
         for location in locations {
-            guard location.horizontalAccuracy > 0,
-                  location.horizontalAccuracy <= 35,
-                  abs(location.timestamp.timeIntervalSinceNow) < 120 else { continue }
+            // Record *why* a fix was dropped. Silently discarding every fix
+            // looks exactly like GPS warming up, and a runner can finish a
+            // whole run at 0.00 mi without ever being told anything is wrong.
+            guard location.horizontalAccuracy > 0, location.horizontalAccuracy <= 35 else {
+                noteRejectedFix(usesReducedAccuracy ? .reducedAccuracy : .poorAccuracy)
+                continue
+            }
+            guard abs(location.timestamp.timeIntervalSinceNow) < 120 else {
+                noteRejectedFix(.staleTimestamp)
+                continue
+            }
 
             let locationElapsed = activeElapsed(at: location.timestamp)
             guard locationElapsed >= accumulatedActiveDuration else { continue }
+
+            noteAcceptedFix()
 
             trackPoints.append(
                 TrackPoint(

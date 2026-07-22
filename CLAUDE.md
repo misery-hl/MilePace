@@ -246,7 +246,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 115 goal-engine checks
+Passed 124 goal-engine checks
 ```
 
 Also run:
@@ -294,14 +294,11 @@ Because history is local-first with no backup by design, a container wipe is unr
 
 ## Known open defects
 
-Five agents walked user stories through the code on 2026-07-21. Fifteen findings were fixed. These were verified and are **not** fixed yet:
+Five agents walked user stories through the code on 2026-07-21. Twenty of the twenty-one findings are now fixed. One remains:
 
-1. **Reduced Accuracy kills tracking silently.** The fix filter in `RunTracker` rejects anything worse than 35 m horizontal accuracy. Under iOS Reduced Accuracy, Core Location returns hundreds to thousands of meters, so nearly every fix is dropped. Distance stays at 0.00 for the whole run and looks like GPS warming up. The only warning appears before the run starts. Detect sustained rejection during a run and say so.
-2. **Persistence failures are silent.** `RunStore.load` and `persist` both use `try?` with no fallback. A failed write loses the run with no signal. A corrupt or unreadable file decodes as an empty history, which is indistinguishable from a new install. Surface both.
-3. **A manual clock change over two minutes stops tracking.** `didUpdateLocations` drops any fix whose timestamp is more than 120 s from now, and never reports it. A pure timezone change is safe; all timing uses UTC dates.
-4. **Goal targets have no plausibility bound.** A 5 km goal with a 1 second target saves and displays "Target pace 0:00 /mi".
-5. **A "best so far" from an unreliable estimate is shown as fact.** `GoalCard` picks the minimum equivalent time with no regard for `isDirectAttempt` or `isDependable`. `GoalOutcomeBlurb` caveats the estimate once, when the run is added, but the goal card then shows it plainly forever.
-6. **History still grows without bound.** Route thinning cut a 150-run history from 76.9 MB to 8.9 MB, and the encode from 1.50 s to 0.15 s, but the whole file is still rewritten on every save. If the history gets much larger, move to one file per run, or an index with lazily loaded routes.
+1. **History still grows without bound.** Route thinning cut a 150-run history from 76.9 MB to 8.9 MB, and the encode from 1.50 s to 0.15 s, and the write now happens off the main actor. But the whole file is still rewritten on every save. At a few hundred runs this is fine. Well beyond that, move to one file per run, or an index with lazily loaded routes.
+
+Fixed since: Reduced Accuracy and a changed device clock now raise a warning on the running screen instead of silently dropping every fix; storage read and write failures are reported instead of swallowed; an implausible target cannot be saved; and a best time derived from a scaled run is labelled as an estimate on the goal card.
 
 ## Recommended next work
 
