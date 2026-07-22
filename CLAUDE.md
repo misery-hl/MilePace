@@ -240,7 +240,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 81 goal-engine checks
+Passed 92 goal-engine checks
 ```
 
 Also run:

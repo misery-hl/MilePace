@@ -203,24 +203,41 @@ enum DistanceUnit: String, Codable, CaseIterable, Identifiable, Equatable {
     /// One step on the picker, in meters.
     ///
     /// Miles and kilometres step by a tenth, which is fine enough for any road
-    /// target. Meters and yards step by 50, which lands exactly on the track
-    /// distances people actually race: 400, 800, 1500, 5000.
+    /// target. Meters step by 50, which lands exactly on the track distances
+    /// people race: 400, 800, 1500, 5000. Yards step by 10, which is fine
+    /// enough for a sprint and still lands on 100, 220, 440, 880, and 1760.
     var stepMeters: Double {
         switch self {
         case .miles: return metersPerMile / 10
         case .kilometers: return 100
         case .meters: return 50
-        case .yards: return 0.9144 * 50
+        case .yards: return 0.9144 * 10
         }
     }
 
-    /// How many steps the picker offers. Each unit reaches beyond a marathon.
+    /// The smallest distance the picker offers, in meters.
+    ///
+    /// Yards start at 40 rather than at one step, because the 40 yard dash is
+    /// the reason most people reach for yards at all.
+    var firstOptionMeters: Double {
+        switch self {
+        case .yards: return 0.9144 * 40
+        default: return stepMeters
+        }
+    }
+
+    /// How many steps the picker offers.
+    ///
+    /// Miles, kilometres, and meters all reach beyond a marathon. Yards stop at
+    /// 5,000, because yards describe sprints and imperial track distances;
+    /// anyone setting a longer goal is thinking in miles or kilometres, and a
+    /// wheel long enough for a marathon in yards would be unusable.
     var stepCount: Int {
         switch self {
         case .miles: return 500        // 50.0 mi
         case .kilometers: return 800   // 80.0 km
         case .meters: return 844       // 42,200 m
-        case .yards: return 924        // 46,200 yd
+        case .yards: return 497        // 40 yd to 5,000 yd
         }
     }
 
@@ -242,7 +259,7 @@ enum DistanceUnit: String, Codable, CaseIterable, Identifiable, Equatable {
 
     /// Every distance the picker offers, in meters.
     var options: [Double] {
-        (1...stepCount).map { Double($0) * stepMeters }
+        (0..<stepCount).map { firstOptionMeters + Double($0) * stepMeters }
     }
 
     /// The offered distance closest to a given one, so switching unit keeps the
