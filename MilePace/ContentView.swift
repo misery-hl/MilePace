@@ -481,7 +481,11 @@ private struct GoalCard: View {
             }
 
             HStack {
-                Text("Target pace \(goal.targetPace.paceText) /mi")
+                // A sprint has no useful pace per mile, so the card names the
+                // kind instead of printing a number nobody races to.
+                Text(goal.showsPace
+                     ? "Target pace \(goal.targetPace.paceText) /mi"
+                     : "Sprint target")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -572,6 +576,7 @@ private struct GoalEditorView: View {
 
     @State private var distanceMeters: Double
     @State private var unit: DistanceUnit
+    @State private var kind: GoalKind
     @State private var mode: EntryMode
     @State private var minutes: Int
     @State private var seconds: Int
@@ -595,8 +600,9 @@ private struct GoalEditorView: View {
         let startingUnit = goal?.distanceUnit ?? .miles
         let miles = meters / metersPerMile
         let total = goal?.targetDuration ?? 720
-        // Longer goals open in pace mode, because that is how runners say them.
-        let startsInPace = miles >= 6
+        // Longer runs open in pace mode, because that is how runners say them.
+        // A sprint is always a total time, so it never opens in pace mode.
+        let startsInPace = startingUnit.kind.allowsPaceEntry && miles >= 6
         let shown = startsInPace ? total / miles : total
 
         // Round once, then split. Truncating the minutes while rounding the
@@ -606,6 +612,7 @@ private struct GoalEditorView: View {
 
         _distanceMeters = State(initialValue: startingUnit.nearestOption(toMeters: meters))
         _unit = State(initialValue: startingUnit)
+        _kind = State(initialValue: startingUnit.kind)
         _mode = State(initialValue: startsInPace ? .pace : .totalTime)
         _minutes = State(initialValue: wholeSeconds / 60)
         _seconds = State(initialValue: wholeSeconds % 60)
@@ -620,12 +627,25 @@ private struct GoalEditorView: View {
     }
 
     private var targetDuration: TimeInterval {
-        mode == .pace ? enteredSeconds * miles : enteredSeconds
+        // A sprint has no pace entry, so its wheels are always a total time.
+        guard kind.allowsPaceEntry, mode == .pace else { return enteredSeconds }
+        return enteredSeconds * miles
     }
 
     private var targetPace: TimeInterval {
         guard miles > 0 else { return 0 }
         return targetDuration / miles
+    }
+
+    private var summaryHeadline: String {
+        // A sprint is stated as a time. Showing it a pace per mile would be
+        // true and useless: a 5 second 40 yard dash is a 3:40 mile pace.
+        guard kind.allowsPaceEntry else {
+            return unit.text(forMeters: distanceMeters) + " in " + targetDuration.clockText
+        }
+        return mode == .pace
+            ? "Total time \(targetDuration.clockText)"
+            : "Target pace \(targetPace.paceText) /mi"
     }
 
     private var attachedRunCount: Int {
@@ -638,8 +658,17 @@ private struct GoalEditorView: View {
                 Color.black.ignoresSafeArea()
 
                 VStack(spacing: 16) {
+                    Picker("Kind", selection: $kind) {
+                        ForEach(GoalKind.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
                     Picker("Distance unit", selection: $unit) {
-                        ForEach(DistanceUnit.allCases) { option in
+                        // Only the units that belong to this kind. A sprint in
+                        // miles and a marathon in yards are both nonsense.
+                        ForEach(kind.units) { option in
                             Text(option.shortName).tag(option)
                         }
                     }
@@ -653,12 +682,14 @@ private struct GoalEditorView: View {
                     .pickerStyle(.wheel)
                     .frame(height: 100)
 
-                    Picker("Enter as", selection: $mode) {
-                        ForEach(EntryMode.allCases) { option in
-                            Text(option.rawValue).tag(option)
+                    if kind.allowsPaceEntry {
+                        Picker("Enter as", selection: $mode) {
+                            ForEach(EntryMode.allCases) { option in
+                                Text(option.rawValue).tag(option)
+                            }
                         }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
 
                     HStack(spacing: 4) {
                         Picker("Minutes", selection: $minutes) {
@@ -680,14 +711,14 @@ private struct GoalEditorView: View {
                     // whole goal is visible however it was entered.
                     if targetDuration > 0 {
                         VStack(spacing: 4) {
-                            Text(mode == .pace
-                                 ? "Total time \(targetDuration.clockText)"
-                                 : "Target pace \(targetPace.paceText) /mi")
+                            Text(summaryHeadline)
                                 .font(.headline)
                                 .foregroundStyle(.mint)
-                            Text(unit.text(forMeters: distanceMeters) + " in " + targetDuration.clockText)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                            if kind.allowsPaceEntry {
+                                Text(unit.text(forMeters: distanceMeters) + " in " + targetDuration.clockText)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
@@ -722,6 +753,17 @@ private struct GoalEditorView: View {
             }
             .onChange(of: mode) { previous, _ in
                 convertEnteredValue(from: previous)
+            }
+            .onChange(of: kind) { _, newKind in
+                // Move to a unit that belongs to the new kind, and drop pace
+                // entry, which only describes a run.
+                if !newKind.units.contains(unit) {
+                    unit = newKind.units[0]
+                }
+                if !newKind.allowsPaceEntry, mode == .pace {
+                    convertEnteredValue(from: .pace)
+                    mode = .totalTime
+                }
             }
             .onChange(of: unit) { _, newUnit in
                 // Snap to the closest distance the new unit offers, so changing
@@ -1031,6 +1073,13 @@ private struct GoalOutcomeBlurb: View {
     }
 
     private var estimateNote: String {
+        // Riegel was fitted on races from about 1500 m upwards. Scaling a
+        // longer run down to a sprint is outside the formula entirely, so say
+        // so plainly rather than implying the estimate is merely approximate.
+        if outcome.goal.kind == .sprint {
+            return "This run was not \(outcome.goal.distanceText). A sprint cannot be estimated from a longer run, so time a real one to measure this goal."
+        }
+
         let base = "This run was not \(outcome.goal.distanceText), so the comparison uses Riegel's formula to estimate the equivalent time."
         return outcome.attempt.isDependable
             ? base

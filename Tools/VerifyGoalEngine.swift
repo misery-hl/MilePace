@@ -217,11 +217,41 @@ enum VerifyGoalEngine {
             check(DistanceUnit.yards.options.contains { nearly($0, 0.9144 * yards, tolerance: 0.001) },
                   "\(Int(yards)) yd is on the picker")
         }
-        check(DistanceUnit.yards.text(forMeters: DistanceUnit.yards.options.last ?? 0) == "5000 yd",
-              "the yard picker reaches 5000 yd")
+        check(DistanceUnit.yards.text(forMeters: DistanceUnit.yards.options.last ?? 0) == "1760 yd",
+              "the yard picker stops at a mile of yards")
+        check(DistanceUnit.meters.text(forMeters: DistanceUnit.meters.options.last ?? 0) == "1600 m",
+              "the metre picker stops at a mile of metres")
+
+        // Run and sprint are separate kinds, with separate units.
+        check(GoalKind.run.units == [.miles, .kilometers], "a run is stated in miles or kilometres")
+        check(GoalKind.sprint.units == [.meters, .yards], "a sprint is stated in metres or yards")
+        check(GoalKind.run.allowsPaceEntry, "a run can be entered as a pace")
+        check(!GoalKind.sprint.allowsPaceEntry, "a sprint cannot be entered as a pace")
+        check(DistanceUnit.miles.kind == .run && DistanceUnit.kilometers.kind == .run,
+              "road units belong to the run kind")
+        check(DistanceUnit.meters.kind == .sprint && DistanceUnit.yards.kind == .sprint,
+              "sprint units belong to the sprint kind")
+        for unit in DistanceUnit.allCases {
+            check(unit.kind.units.contains(unit), "\(unit.shortName) belongs to its own kind")
+        }
+
+        // The kind is derived, so a goal and its unit can never disagree.
+        let sprintGoal = RunGoal(distanceMeters: 0.9144 * 40, targetDuration: 5, distanceUnit: .yards)
+        check(sprintGoal.kind == .sprint, "a yard goal is a sprint")
+        check(!sprintGoal.showsPace, "a sprint goal hides its pace per mile")
+        check(sprintGoal.title == "40 yd in 0:05", "a sprint goal reads as a distance and a time")
+        let runGoal = RunGoal(distanceMeters: 5_000, targetDuration: 1_500, distanceUnit: .kilometers)
+        check(runGoal.kind == .run, "a kilometre goal is a run")
+        check(runGoal.showsPace, "a run goal shows its pace per mile")
+
+        // Sprint distances people actually race are all reachable.
+        for meters in [60.0, 100.0, 200.0, 400.0, 800.0, 1_500.0, 1_600.0] {
+            check(DistanceUnit.meters.options.contains { nearly($0, meters, tolerance: 0.001) },
+                  "\(Int(meters)) m is on the sprint picker")
+        }
 
         // Every other unit still starts at one step.
-        check(nearly(DistanceUnit.meters.options[0], 50, tolerance: 0.001), "meters start at 50 m")
+        check(nearly(DistanceUnit.meters.options[0], 5, tolerance: 0.001), "metres start at 5 m")
         check(DistanceUnit.kilometers.text(forMeters: DistanceUnit.kilometers.options[0]) == "0.1 km",
               "kilometres start at a tenth")
 
@@ -231,11 +261,16 @@ enum VerifyGoalEngine {
         check(gaps.allSatisfy { nearly($0, metersPerMile / 10, tolerance: 0.001) },
               "every mile step is the same size")
 
-        // Track distances are reachable exactly.
-        for distance in [400.0, 800.0, 1_500.0, 5_000.0, 10_000.0] {
+        // Track distances up to a mile are reachable exactly. Anything longer
+        // is a run, set in kilometres or miles, not a sprint.
+        for distance in [400.0, 800.0, 1_500.0] {
             check(DistanceUnit.meters.options.contains { nearly($0, distance, tolerance: 0.001) },
-                  "\(Int(distance)) m is on the picker")
+                  "\(Int(distance)) m is on the sprint picker")
         }
+        check(!DistanceUnit.meters.options.contains { nearly($0, 5_000, tolerance: 0.001) },
+              "5000 m is not a sprint; it is a run in kilometres")
+        check(nearly(DistanceUnit.kilometers.nearestOption(toMeters: 5_000), 5_000, tolerance: 0.001),
+              "5000 m is exact on the kilometre picker instead")
 
         // Switching unit keeps the goal rather than resetting it.
         let fiveKm = 5_000.0
