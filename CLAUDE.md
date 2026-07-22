@@ -1,6 +1,6 @@
 # MilePace Claude Code Handoff
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 This file is the source-of-truth handoff for continuing MilePace with Claude Code. Read it before editing, and update it when the facts below stop being true.
 
@@ -63,18 +63,24 @@ MilePaceCore -> <device>
 
 ## Current Git state
 
-`main` is clean and fully pushed. Recent history:
+`main` is clean and fully pushed. Every change so far went in through a pull
+request; twelve are merged and none are open. Recent history:
 
 ```text
-1bdd48a Merge pull request #5 from misery-hl/chore/sim-preview-skill
-7104510 Merge pull request #4 from misery-hl/feat/route-map
-75d0ffd Merge pull request #3 from misery-hl/chore/bundle-id-and-signing
-a7673ca Merge pull request #2 from misery-hl/fix/share-sheet-empty-items
-7636506 Merge pull request #1 from misery-hl/feat/social-share-card
-1ce3acb Initial MilePace iOS app
+23df1b2 Merge pull request #12 from misery-hl/feat/yards-start-at-forty
+126c4e6 Start the yard picker at 40, and step it by 10
+6b1616c Merge pull request #11 from misery-hl/feat/goal-distance-units
+e9aef67 Pick a goal distance in even steps, in the unit the runner thinks in
+4d3f84c Merge pull request #10 from misery-hl/fix/user-story-findings
+2e6cc22 Fix defects found by user-story walkthroughs
+b9626f7 Merge pull request #9 from misery-hl/feat/multiple-goals
+af75c87 Support several goals at once, with editing and guarded deletion
 ```
 
-There is no longer a user-owned uncommitted change to work around. The signing and bundle-identifier changes that previously had to be preserved in the worktree are committed as of PR #3, with the owner's explicit approval to publish `DEVELOPMENT_TEAM` in this public repository.
+The signing and bundle-identifier changes that once had to be preserved in the
+worktree are committed as of PR #3, with the owner's explicit approval to
+publish `DEVELOPMENT_TEAM` in this public repository. There is no user-owned
+uncommitted change to work around.
 
 ## Working agreement
 
