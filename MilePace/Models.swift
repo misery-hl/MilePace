@@ -303,10 +303,36 @@ enum DistanceUnit: String, Codable, CaseIterable, Identifiable, Equatable {
         (0..<stepCount).map { firstOptionMeters + Double($0) * stepMeters }
     }
 
+    /// Where the picker opens when the incoming distance does not belong to
+    /// this unit at all. These are the distances people most often want.
+    var defaultOptionMeters: Double {
+        switch self {
+        case .miles: return 2 * metersPerMile
+        case .kilometers: return 5_000
+        case .meters: return 100
+        case .yards: return firstOptionMeters   // the 40 yard dash
+        }
+    }
+
     /// The offered distance closest to a given one, so switching unit keeps the
     /// goal the runner already had instead of resetting it.
     func nearestOption(toMeters meters: Double) -> Double {
         options.min { abs($0 - meters) < abs($1 - meters) } ?? stepMeters
+    }
+
+    /// Where the picker should land when a distance arrives from another unit.
+    ///
+    /// Only snaps to the nearest option when the distance is actually within
+    /// this unit's range. Outside it, "nearest" means the first or last option,
+    /// which is why switching a 5 km goal to sprint used to open at 1,600 m —
+    /// the far end of the wheel, and a long scroll from the 100 m and 400 m a
+    /// sprinter actually wants.
+    func sensibleOption(forMeters meters: Double) -> Double {
+        guard let smallest = options.first, let largest = options.last else {
+            return defaultOptionMeters
+        }
+        guard meters >= smallest, meters <= largest else { return defaultOptionMeters }
+        return nearestOption(toMeters: meters)
     }
 }
 

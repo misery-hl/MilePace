@@ -290,6 +290,31 @@ enum VerifyGoalEngine {
         check(unitless?.first?.distanceUnit == .miles, "a goal without a unit defaults to miles")
         check(unitless?.first?.title == "2 mi in 12:00", "and still reads the same")
 
+        // A distance from another unit must not park the wheel at its far end.
+        // Switching a 5 km goal to sprint used to open at 1,600 m.
+        check(nearly(DistanceUnit.meters.sensibleOption(forMeters: 5_000), 100, tolerance: 0.001),
+              "a 5 km goal opens the metre wheel at 100 m, not 1600 m")
+        check(nearly(DistanceUnit.yards.sensibleOption(forMeters: 5_000), 0.9144 * 40, tolerance: 0.001),
+              "a 5 km goal opens the yard wheel at the 40 yard dash")
+        check(nearly(DistanceUnit.miles.sensibleOption(forMeters: 0.9144 * 40), 2 * metersPerMile, tolerance: 0.001),
+              "a 40 yard goal opens the mile wheel at 2 mi, not 0.1 mi")
+        check(nearly(DistanceUnit.kilometers.sensibleOption(forMeters: 0.9144 * 40), 5_000, tolerance: 0.001),
+              "a 40 yard goal opens the kilometre wheel at 5 km")
+
+        // A distance that does fit is still kept exactly.
+        check(nearly(DistanceUnit.meters.sensibleOption(forMeters: 400), 400, tolerance: 0.001),
+              "400 m is kept when switching to metres")
+        check(nearly(DistanceUnit.kilometers.sensibleOption(forMeters: 5_000), 5_000, tolerance: 0.001),
+              "5 km is kept when switching to kilometres")
+        check(nearly(DistanceUnit.miles.sensibleOption(forMeters: 5_000), DistanceUnit.miles.nearestOption(toMeters: 5_000), tolerance: 0.001),
+              "a 5 km goal still maps onto the nearest mile step")
+
+        // Every default is a real option on its own wheel.
+        for unit in DistanceUnit.allCases {
+            check(unit.options.contains { nearly($0, unit.defaultOptionMeters, tolerance: 0.001) },
+                  "the \(unit.shortName) default is on its own wheel")
+        }
+
         // Only the absurd is rejected. Checked as a speed so one rule covers
         // a 40 yard dash and a marathon.
         check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).isPlausible,

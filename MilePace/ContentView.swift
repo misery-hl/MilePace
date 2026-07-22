@@ -648,7 +648,7 @@ private struct GoalEditorView: View {
         // became 5 min 00 s rather than 6 min 00 s, silently shrinking the goal.
         let wholeSeconds = Int(shown.rounded())
 
-        _distanceMeters = State(initialValue: startingUnit.nearestOption(toMeters: meters))
+        _distanceMeters = State(initialValue: startingUnit.sensibleOption(forMeters: meters))
         _unit = State(initialValue: startingUnit)
         _kind = State(initialValue: startingUnit.kind)
         _mode = State(initialValue: startsInPace ? .pace : .totalTime)
@@ -817,9 +817,11 @@ private struct GoalEditorView: View {
                 }
             }
             .onChange(of: unit) { _, newUnit in
-                // Snap to the closest distance the new unit offers, so changing
-                // unit re-states the same goal instead of resetting it.
-                distanceMeters = newUnit.nearestOption(toMeters: distanceMeters)
+                // Keep the same goal when the distance fits the new unit, and
+                // fall back to a sensible distance when it does not. Snapping to
+                // the nearest option alone parked a 5 km goal at 1,600 m, the
+                // far end of the sprint wheel.
+                distanceMeters = newUnit.sensibleOption(forMeters: distanceMeters)
             }
             .alert("Delete this goal?", isPresented: $isConfirmingDelete) {
                 Button("Delete goal", role: .destructive) {
