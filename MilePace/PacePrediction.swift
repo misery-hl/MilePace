@@ -49,17 +49,29 @@ enum PacePrediction {
     /// This drives the live display. It needs a minimum distance because GPS
     /// pace is unstable at the start of a run and would make the projection
     /// jump about.
+    /// Returns nil once the run has already passed the goal distance. Riegel
+    /// estimates a maximal effort at a *different* distance; it is not a way to
+    /// read a split back out of a longer run. Past the goal distance it would be
+    /// asked to scale downwards, and the answer would keep improving purely
+    /// because the runner kept running, describing a performance that already
+    /// finished. Better to say nothing than to show a number that drifts.
     static func liveProjection(
         distanceMeters: Double,
         elapsed: TimeInterval,
         goal: RunGoal
     ) -> TimeInterval? {
-        guard distanceMeters >= 160 else { return nil }
+        guard distanceMeters >= 160, distanceMeters < goal.distanceMeters else { return nil }
         return equivalentDuration(
             fromDistanceMeters: distanceMeters,
             duration: elapsed,
             toDistanceMeters: goal.distanceMeters
         )
+    }
+
+    /// True once the run is longer than the goal, so the live row can say the
+    /// goal distance is behind the runner rather than showing a blank.
+    static func hasPassedGoalDistance(distanceMeters: Double, goal: RunGoal) -> Bool {
+        distanceMeters >= goal.distanceMeters && goal.distanceMeters > 0
     }
 }
 
@@ -180,8 +192,17 @@ struct GoalOutcome: Equatable {
     /// population data behind it.
     func progressFraction(firstAttempt: GoalAttempt?) -> Double? {
         guard let firstAttempt else { return nil }
+
         let startingGap = firstAttempt.goalDistanceDuration - goal.targetDuration
-        guard startingGap > 0 else { return 1 }
+
+        // The first attempt already met the target, so there was never a gap to
+        // close. Reporting a fraction here would claim progress the runner has
+        // not made, and would read as "100% closed" even on a run that missed
+        // the target badly. Only a run that also meets the target is complete.
+        guard startingGap > 0 else {
+            return reachedTarget ? 1 : nil
+        }
+
         let remainingGap = max(0, deltaToTarget)
         return min(max(1 - (remainingGap / startingGap), 0), 1)
     }

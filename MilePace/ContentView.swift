@@ -22,7 +22,12 @@ struct ContentView: View {
                 }
             }
             .tint(.mint)
-            .alert("MilePace needs GPS", isPresented: Binding(
+            // A brief signal drop is not a permission problem. One title for
+            // both made a passing glitch read as though access had been lost.
+            .alert(tracker.authorizationStatus == .denied
+                   ? "MilePace needs GPS"
+                   : "GPS signal problem",
+                   isPresented: Binding(
                 get: { tracker.errorMessage != nil },
                 set: { if !$0 { tracker.errorMessage = nil } }
             )) {
@@ -103,15 +108,82 @@ private struct StartView: View {
 
             ForEach(store.records.prefix(5)) { record in
                 NavigationLink {
-                    RunDetailView(record: record)
+                    SavedRunScreen(record: record)
                 } label: {
                     RunRow(record: record)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if store.records.count > 5 {
+                NavigationLink {
+                    AllRunsScreen()
+                } label: {
+                    HStack {
+                        Text("See all \(store.records.count) runs")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.vertical, 14)
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: .infinity)
+                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 10)
+    }
+}
+
+/// A saved run opened from the history.
+///
+/// `RunDetailView` is a plain stack. The summary screen supplies its own
+/// scrolling, but a pushed screen does not inherit it, so the route map and
+/// everything under it used to be clipped off the bottom with no way to reach
+/// the Share button. This screen also carries the goal controls, so a run can
+/// join a goal that did not exist when the run was recorded.
+private struct SavedRunScreen: View {
+    let record: RunRecord
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    GoalApplyView(record: record)
+                    RunDetailView(record: record)
+                }
+                .padding(20)
+            }
+        }
+    }
+}
+
+private struct AllRunsScreen: View {
+    @EnvironmentObject private var store: RunStore
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(store.records) { record in
+                        NavigationLink {
+                            SavedRunScreen(record: record)
+                        } label: {
+                            RunRow(record: record)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .navigationTitle("All runs")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -466,6 +538,27 @@ private struct GoalCard: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 18))
         .onTapGesture(perform: onSelect)
+        // Without these the card is a plain stack: VoiceOver reads each figure
+        // separately and never says the card is the control that chooses which
+        // goal the running screen follows.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityHint(isTracked
+                           ? "Already followed while running"
+                           : "Double tap to follow this goal while running")
+        .accessibilityAction(named: "Edit goal", onEdit)
+    }
+
+    private var accessibilitySummary: String {
+        var parts = ["\(goal.distanceText) in \(goal.targetDuration.clockText)"]
+        if let best {
+            parts.append("best so far \(best.goalDistanceDuration.clockText)")
+        } else {
+            parts.append("no runs added yet")
+        }
+        if isTracked { parts.append("followed while running") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -482,6 +575,7 @@ private struct GoalEditorView: View {
     @State private var minutes: Int
     @State private var seconds: Int
     @State private var isConfirmingDelete = false
+    @State private var isSaving = false
 
     /// A two-mile target is natural to state as a total time. A half marathon
     /// is natural to state as a pace, and nobody wants to count 111 minutes on
@@ -504,10 +598,15 @@ private struct GoalEditorView: View {
         let startsInPace = distance >= 6
         let shown = startsInPace ? total / distance : total
 
+        // Round once, then split. Truncating the minutes while rounding the
+        // seconds loses a whole minute whenever the seconds carry: 359.5 s
+        // became 5 min 00 s rather than 6 min 00 s, silently shrinking the goal.
+        let wholeSeconds = Int(shown.rounded())
+
         _miles = State(initialValue: distance)
         _mode = State(initialValue: startsInPace ? .pace : .totalTime)
-        _minutes = State(initialValue: Int(shown) / 60)
-        _seconds = State(initialValue: Int(shown.rounded()) % 60)
+        _minutes = State(initialValue: wholeSeconds / 60)
+        _seconds = State(initialValue: wholeSeconds % 60)
     }
 
     private var enteredSeconds: TimeInterval {
@@ -605,7 +704,7 @@ private struct GoalEditorView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save", action: save)
-                        .disabled(targetDuration <= 0)
+                        .disabled(targetDuration <= 0 || isSaving)
                 }
             }
             .onChange(of: mode) { previous, _ in
@@ -640,8 +739,10 @@ private struct GoalEditorView: View {
         guard miles > 0 else { return }
         let total = previous == .pace ? enteredSeconds * miles : enteredSeconds
         let shown = mode == .pace ? total / miles : total
-        minutes = Int(shown) / 60
-        seconds = Int(shown.rounded()) % 60
+        // Round once, then split. See the note in init.
+        let wholeSeconds = Int(shown.rounded())
+        minutes = wholeSeconds / 60
+        seconds = wholeSeconds % 60
     }
 
     private func label(for option: Double) -> String {
@@ -652,6 +753,11 @@ private struct GoalEditorView: View {
     }
 
     private func save() {
+        // A second tap during the dismiss animation would otherwise mint a
+        // second goal with a new identifier and identical values.
+        guard !isSaving else { return }
+        isSaving = true
+
         if var existing = goal {
             // Editing keeps runIDs, so correcting a target never costs history.
             existing.distanceMeters = miles * metersPerMile
@@ -663,7 +769,12 @@ private struct GoalEditorView: View {
                 targetDuration: targetDuration
             )
             goalStore.add(created)
-            goalStore.trackedGoalID = created.id
+            // Only adopt the new goal if the runner was not already following
+            // one. Creating a goal should not quietly change what the running
+            // screen shows.
+            if goalStore.trackedGoalID == nil {
+                goalStore.trackedGoalID = created.id
+            }
         }
         dismiss()
     }
@@ -682,6 +793,15 @@ private struct LiveGoalRow: View {
         projection.map { $0 - goal.targetDuration }
     }
 
+    private var hasPassedGoal: Bool {
+        PacePrediction.hasPassedGoalDistance(distanceMeters: distanceMeters, goal: goal)
+    }
+
+    private var detailText: String {
+        if hasPassedGoal { return "Goal distance is behind you" }
+        return projection.map { "Projected \($0.clockText)" } ?? "Projection settles shortly"
+    }
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
@@ -689,7 +809,7 @@ private struct LiveGoalRow: View {
                     .font(.caption2.bold())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                Text(projection.map { "Projected \($0.clockText)" } ?? "Projection settles shortly")
+                Text(detailText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -731,15 +851,30 @@ private struct GoalApplyView: View {
                 // Every goal is offered. A run can count towards more than one,
                 // and only the runner knows which ones it was meant for.
                 ForEach(goalStore.activeGoals) { goal in
-                    if goalStore.contains(runID: record.id, in: goal),
-                       let current = goalStore.goal(withID: goal.id),
-                       let outcome = GoalEvaluation.outcome(
-                           forRunID: record.id, goal: current, records: store.records
-                       ) {
-                        GoalOutcomeBlurb(
-                            outcome: outcome,
-                            attempts: GoalEvaluation.attempts(for: current, in: store.records)
-                        )
+                    if goalStore.contains(runID: record.id, in: goal) {
+                        if let current = goalStore.goal(withID: goal.id),
+                           let outcome = GoalEvaluation.outcome(
+                               forRunID: record.id, goal: current, records: store.records
+                           ) {
+                            GoalOutcomeBlurb(
+                                outcome: outcome,
+                                attempts: GoalEvaluation.attempts(for: current, in: store.records)
+                            )
+                        } else {
+                            // The run is attached, but carries no usable
+                            // distance or time, so no comparison exists. Saying
+                            // so beats re-offering a button that does nothing.
+                            Label(
+                                "This run is too short to count towards \(goal.title).",
+                                systemImage: "exclamationmark.circle"
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+                        }
                     } else {
                         Button {
                             goalStore.attach(runID: record.id, to: goal)
@@ -837,6 +972,10 @@ private struct GoalOutcomeBlurb: View {
     private var comparisonLine: String {
         let target = outcome.goal.targetDuration.clockText
         let gap = outcome.deltaToTarget.differenceText
+
+        if outcome.deltaToTarget == 0 {
+            return "That matches your \(target) target exactly."
+        }
 
         if outcome.reachedTarget {
             return "That beats your \(target) target by \(gap)."

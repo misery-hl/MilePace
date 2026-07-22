@@ -22,6 +22,43 @@ struct TrackPoint: Codable, Equatable {
     let segment: Int
 }
 
+/// Reduces a recorded route to a size worth storing and drawing.
+///
+/// Core Location is asked for a fix every 2 m, which is the right resolution for
+/// measuring distance but far more than a map needs. Kept in full, a six month
+/// history reaches tens of megabytes, and the whole file is rewritten on every
+/// save. Thinning at save time fixes the file size, the save cost, and the
+/// number of points handed to the map.
+///
+/// The first and last point of every segment survive, so the route still starts
+/// and ends where the runner did, and a pause still reads as a gap.
+enum RouteThinning {
+    /// Enough to draw a smooth route at any zoom a phone screen offers.
+    static let maximumPoints = 500
+
+    static func thin(_ points: [TrackPoint], limit: Int = maximumPoints) -> [TrackPoint] {
+        guard limit > 0 else { return [] }
+        guard points.count > limit else { return points }
+
+        let stride = Int((Double(points.count) / Double(limit)).rounded(.up))
+        guard stride > 1 else { return points }
+
+        var kept: [TrackPoint] = []
+        kept.reserveCapacity(limit + 8)
+
+        for (index, point) in points.enumerated() {
+            let startsSegment = index == 0 || points[index - 1].segment != point.segment
+            let endsSegment = index == points.count - 1 || points[index + 1].segment != point.segment
+
+            if startsSegment || endsSegment || index % stride == 0 {
+                kept.append(point)
+            }
+        }
+
+        return kept
+    }
+}
+
 /// Latitude/longitude extent of a recorded route.
 struct RouteBounds: Equatable {
     let minLatitude: Double
@@ -205,10 +242,17 @@ extension TimeInterval {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
+    /// A pace over an hour per mile is slow but real. A runner who stops at a
+    /// light without pausing will pass it within a minute, and the current-mile
+    /// pace is the largest number on the running screen. Blanking it there
+    /// looks identical to having no data at all, so format the hours instead.
     var paceText: String {
-        guard isFinite, self > 0, self < 3_600 else { return "--:--" }
-        let roundedSeconds = Int(rounded())
-        return String(format: "%d:%02d", roundedSeconds / 60, roundedSeconds % 60)
+        guard isFinite, self > 0 else { return "--:--" }
+        let seconds = Int(rounded())
+        if seconds >= 3_600 {
+            return String(format: "%d:%02d:%02d", seconds / 3_600, (seconds % 3_600) / 60, seconds % 60)
+        }
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     /// The size of a difference, without a sign. The caller supplies the wording

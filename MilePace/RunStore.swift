@@ -29,8 +29,14 @@ final class RunStore: ObservableObject {
         records = decoded.sorted(by: { $0.startedAt > $1.startedAt })
     }
 
+    /// Encodes on the main actor, because `records` belongs to it, then writes
+    /// off it. Finishing a run should never block the screen on disk I/O, and
+    /// the write grows with the whole history rather than the new run.
     private func persist() {
         guard let data = try? JSONEncoder().encode(records) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        let destination = fileURL
+        Task.detached(priority: .utility) {
+            try? data.write(to: destination, options: .atomic)
+        }
     }
 }

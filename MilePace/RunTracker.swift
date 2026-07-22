@@ -106,7 +106,10 @@ final class RunTracker: NSObject, ObservableObject {
             distanceMeters: accumulator.totalDistanceMeters,
             activeDuration: accumulatedActiveDuration,
             mileSplits: accumulator.mileSplits,
-            trackPoints: trackPoints
+            // Thin before saving. Fixes arrive every 2 m, which the distance
+            // maths needs but the stored route does not, and the whole history
+            // is rewritten on every save.
+            trackPoints: RouteThinning.thin(trackPoints)
         )
         store.save(record)
         lastRun = record
@@ -260,7 +263,10 @@ extension RunTracker: @preconcurrency CLLocationManagerDelegate {
 
         refreshNow()
 
-        if accumulator.mileSplits.count > splitCountBeforeUpdate {
+        // One buzz per completed mile. A batch of fixes delivered after the
+        // screen was locked can cross more than one boundary at once, and a
+        // single buzz would leave a mile unmarked.
+        for _ in splitCountBeforeUpdate..<accumulator.mileSplits.count {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
     }
