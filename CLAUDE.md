@@ -246,7 +246,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 124 goal-engine checks
+Passed 135 goal-engine checks
 ```
 
 Also run:
