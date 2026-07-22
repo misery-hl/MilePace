@@ -113,6 +113,18 @@ CommandLineTools, every `simctl` call fails with "unable to find utility". Expor
 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`. The script does this
 for you; do it yourself for any ad-hoc `simctl` command.
 
+**The first launch after an install is slower than later ones.** A screenshot
+taken too early returns a blank white frame, which reads as a crash. It is not.
+Check the log before you debug a phantom: if the app reached
+`UIApplicationDidBecomeActiveNotification`, it launched fine and the capture
+simply raced it. Keep the default settle, and do not shorten it for the first
+screen in a batch.
+
+**A screen driven by live state can be wiped at launch.** MilePace calls
+`refreshNow()` when the scene becomes active, which recomputes its published
+values from an empty accumulator and erases anything staged beforehand. Seed
+from the same place the app writes, not before it.
+
 **Network-backed content renders blank at first.** The first map screenshot came
 back as an empty grey grid, which looks exactly like a broken view. Tiles simply
 had not downloaded. Twenty-five seconds later the streets appeared. Before

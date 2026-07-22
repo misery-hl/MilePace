@@ -137,16 +137,15 @@ struct RunRecord: Codable, Equatable, Identifiable {
 struct RunGoal: Codable, Equatable, Identifiable {
     let id: UUID
     let createdAt: Date
-    var title: String
-    let distanceMeters: Double
-    let targetDuration: TimeInterval
+    /// Editable, so a runner can correct a goal without losing the runs on it.
+    var distanceMeters: Double
+    var targetDuration: TimeInterval
     var runIDs: [UUID]
     var isArchived: Bool
 
     init(
         id: UUID = UUID(),
         createdAt: Date = Date(),
-        title: String,
         distanceMeters: Double,
         targetDuration: TimeInterval,
         runIDs: [UUID] = [],
@@ -154,11 +153,16 @@ struct RunGoal: Codable, Equatable, Identifiable {
     ) {
         self.id = id
         self.createdAt = createdAt
-        self.title = title
         self.distanceMeters = distanceMeters
         self.targetDuration = targetDuration
         self.runIDs = runIDs
         self.isArchived = isArchived
+    }
+
+    /// Derived rather than stored, so editing a goal cannot leave a stale name
+    /// behind. Older saved goals carry a `title` key, which decoding ignores.
+    var title: String {
+        "\(distanceText) in \(targetDuration.clockText)"
     }
 
     var distanceMiles: Double {

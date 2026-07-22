@@ -79,7 +79,7 @@ private struct StartView: View {
                         .foregroundStyle(.orange)
                 }
 
-                GoalSection()
+                GoalsSection()
 
                 Label("Runs stay on this iPhone", systemImage: "lock.fill")
                     .font(.footnote)
@@ -182,7 +182,7 @@ private struct RunDashboardView: View {
                 MetricCard(title: "LIVE PACE", value: tracker.rollingPace?.paceText ?? "--:--", unit: "/mi")
             }
 
-            if let goal = goalStore.activeGoal {
+            if let goal = goalStore.trackedGoal {
                 LiveGoalRow(
                     goal: goal,
                     distanceMeters: tracker.distanceMeters,
@@ -309,48 +309,73 @@ private struct RunDetailView: View {
     }
 }
 
-private struct GoalSection: View {
+private struct GoalsSection: View {
     @EnvironmentObject private var goalStore: GoalStore
     @EnvironmentObject private var store: RunStore
-    @State private var isEditing = false
+
+    @State private var editingGoal: RunGoal?
+    @State private var isCreating = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("GOAL")
+                Text("GOALS")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
                     .tracking(1.2)
                 Spacer()
-                if goalStore.activeGoal != nil {
-                    Button("Change") { isEditing = true }
-                        .font(.caption.bold())
+                if !goalStore.activeGoals.isEmpty {
+                    Button { isCreating = true } label: {
+                        Label("New", systemImage: "plus")
+                            .font(.caption.bold())
+                    }
                 }
             }
 
-            if let goal = goalStore.activeGoal {
-                GoalProgressCard(goal: goal, records: store.records)
-            } else {
-                Button { isEditing = true } label: {
+            if goalStore.activeGoals.isEmpty {
+                Button { isCreating = true } label: {
                     Label("Set a goal", systemImage: "target")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
                 }
-                Text("Choose a distance and a target time. Add runs to the goal to see how close you are.")
+                Text("Choose a distance and a target. Add runs to a goal to see how close you are.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            } else {
+                ForEach(goalStore.activeGoals) { goal in
+                    GoalCard(
+                        goal: goal,
+                        records: store.records,
+                        isTracked: goalStore.trackedGoal?.id == goal.id,
+                        onSelect: { goalStore.trackedGoalID = goal.id },
+                        onEdit: { editingGoal = goal }
+                    )
+                }
+
+                if goalStore.activeGoals.count > 1 {
+                    Label(
+                        "Tap a goal to follow it while you run.",
+                        systemImage: "location.fill"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .sheet(isPresented: $isEditing) { GoalEditorView() }
+        .sheet(isPresented: $isCreating) { GoalEditorView(goal: nil) }
+        .sheet(item: $editingGoal) { goal in GoalEditorView(goal: goal) }
     }
 }
 
-private struct GoalProgressCard: View {
+private struct GoalCard: View {
     let goal: RunGoal
     let records: [RunRecord]
+    let isTracked: Bool
+    let onSelect: () -> Void
+    let onEdit: () -> Void
 
     private var attempts: [GoalAttempt] {
         GoalEvaluation.attempts(for: goal, in: records)
@@ -366,20 +391,41 @@ private struct GoalProgressCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 // The distance leads, because the target time is already shown
                 // on the right. Repeating the whole goal title reads as noise.
                 Text(goal.distanceText)
                     .font(.title3.bold())
+                if isTracked {
+                    Image(systemName: "location.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.mint)
+                        .accessibilityLabel("Followed while running")
+                }
                 Spacer()
                 Text(goal.targetDuration.clockText)
                     .font(.title3.bold().monospacedDigit())
                     .foregroundStyle(.mint)
             }
 
-            Text("Target pace \(goal.targetPace.paceText) /mi")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Target pace \(goal.targetPace.paceText) /mi")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                // A separate control, so tapping the card can mean "follow this
+                // one" without the edit screen appearing by accident.
+                Button(action: onEdit) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 12)
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Edit \(goal.title)")
+            }
 
             if let best, let gap {
                 Divider().overlay(.white.opacity(0.15))
@@ -413,22 +459,63 @@ private struct GoalProgressCard: View {
             }
         }
         .padding(18)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+        .background(.white.opacity(isTracked ? 0.13 : 0.07), in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(isTracked ? Color.mint.opacity(0.5) : .clear, lineWidth: 1.5)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .onTapGesture(perform: onSelect)
     }
 }
 
 private struct GoalEditorView: View {
+    /// Nil creates a goal. A value edits that goal.
+    let goal: RunGoal?
+
     @EnvironmentObject private var goalStore: GoalStore
+    @EnvironmentObject private var store: RunStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var miles = 2.0
-    @State private var minutes = 12
-    @State private var seconds = 0
+    @State private var miles: Double
+    @State private var mode: EntryMode
+    @State private var minutes: Int
+    @State private var seconds: Int
+    @State private var isConfirmingDelete = false
 
-    private let mileOptions: [Double] = [0.5, 1, 1.5, 2, 3, 3.1, 4, 5, 6, 6.2, 8, 10, 13.1, 26.2]
+    /// A two-mile target is natural to state as a total time. A half marathon
+    /// is natural to state as a pace, and nobody wants to count 111 minutes on
+    /// a wheel. Both describe the same goal, so the editor accepts either.
+    enum EntryMode: String, CaseIterable, Identifiable {
+        case totalTime = "Total time"
+        case pace = "Pace per mile"
+
+        var id: String { rawValue }
+    }
+
+    private let mileOptions: [Double] = [0.25, 0.5, 1, 1.5, 2, 3, 3.1, 4, 5, 6, 6.2, 8, 10, 13.1, 20, 26.2]
+
+    init(goal: RunGoal?) {
+        self.goal = goal
+
+        let distance = goal.map { $0.distanceMeters / metersPerMile } ?? 2
+        let total = goal?.targetDuration ?? 720
+        // Longer goals open in pace mode, because that is how runners say them.
+        let startsInPace = distance >= 6
+        let shown = startsInPace ? total / distance : total
+
+        _miles = State(initialValue: distance)
+        _mode = State(initialValue: startsInPace ? .pace : .totalTime)
+        _minutes = State(initialValue: Int(shown) / 60)
+        _seconds = State(initialValue: Int(shown.rounded()) % 60)
+    }
+
+    private var enteredSeconds: TimeInterval {
+        TimeInterval(minutes * 60 + seconds)
+    }
 
     private var targetDuration: TimeInterval {
-        TimeInterval(minutes * 60 + seconds)
+        mode == .pace ? enteredSeconds * miles : enteredSeconds
     }
 
     private var targetPace: TimeInterval {
@@ -436,52 +523,81 @@ private struct GoalEditorView: View {
         return targetDuration / miles
     }
 
+    private var attachedRunCount: Int {
+        goal.map { GoalEvaluation.attempts(for: $0, in: store.records).count } ?? 0
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                VStack(spacing: 18) {
-                    Text("Pick a distance and the time you want to run it in.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-
+                VStack(spacing: 16) {
                     Picker("Distance", selection: $miles) {
                         ForEach(mileOptions, id: \.self) { option in
                             Text(label(for: option)).tag(option)
                         }
                     }
                     .pickerStyle(.wheel)
-                    .frame(height: 110)
+                    .frame(height: 100)
+
+                    Picker("Enter as", selection: $mode) {
+                        ForEach(EntryMode.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
 
                     HStack(spacing: 4) {
                         Picker("Minutes", selection: $minutes) {
                             ForEach(0..<240, id: \.self) { Text("\($0)").tag($0) }
                         }
                         .pickerStyle(.wheel)
-                        .frame(width: 80, height: 130)
+                        .frame(width: 80, height: 120)
                         Text("min").foregroundStyle(.secondary)
 
                         Picker("Seconds", selection: $seconds) {
                             ForEach(0..<60, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
                         }
                         .pickerStyle(.wheel)
-                        .frame(width: 80, height: 130)
+                        .frame(width: 80, height: 120)
                         Text("sec").foregroundStyle(.secondary)
                     }
 
+                    // Always show the value the runner did not type, so the
+                    // whole goal is visible however it was entered.
                     if targetDuration > 0 {
-                        Text("Target pace \(targetPace.paceText) /mi")
-                            .font(.headline)
-                            .foregroundStyle(.mint)
+                        VStack(spacing: 4) {
+                            Text(mode == .pace
+                                 ? "Total time \(targetDuration.clockText)"
+                                 : "Target pace \(targetPace.paceText) /mi")
+                                .font(.headline)
+                                .foregroundStyle(.mint)
+                            Text(label(for: miles) + " in " + targetDuration.clockText)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
-                    Spacer()
+                    if goal != nil {
+                        Divider().overlay(.white.opacity(0.15)).padding(.top, 4)
+                        Button(role: .destructive) {
+                            isConfirmingDelete = true
+                        } label: {
+                            Label("Delete goal", systemImage: "trash")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(.red.opacity(0.16), in: RoundedRectangle(cornerRadius: 16))
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
                 }
                 .padding(20)
             }
-            .navigationTitle("Set a goal")
+            .navigationTitle(goal == nil ? "New goal" : "Edit goal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -492,29 +608,63 @@ private struct GoalEditorView: View {
                         .disabled(targetDuration <= 0)
                 }
             }
+            .onChange(of: mode) { previous, _ in
+                convertEnteredValue(from: previous)
+            }
+            .alert("Delete this goal?", isPresented: $isConfirmingDelete) {
+                Button("Delete goal", role: .destructive) {
+                    if let goal { goalStore.delete(goal) }
+                    dismiss()
+                }
+                Button("Keep goal", role: .cancel) {}
+            } message: {
+                Text(deleteWarning)
+            }
         }
+    }
+
+    /// Says exactly what is lost, and what is not. Losing a goal by a mistaken
+    /// tap should never leave the runner guessing about their run history.
+    private var deleteWarning: String {
+        guard let goal else { return "" }
+        if attachedRunCount == 0 {
+            return "This removes \(goal.title). You have not added any runs to it."
+        }
+        let runs = attachedRunCount == 1 ? "1 run" : "\(attachedRunCount) runs"
+        return "This removes \(goal.title) and its progress, including the \(runs) you added to it. "
+            + "The runs themselves stay in your history. This cannot be undone."
+    }
+
+    /// Keeps the goal the same when the runner switches how they state it.
+    private func convertEnteredValue(from previous: EntryMode) {
+        guard miles > 0 else { return }
+        let total = previous == .pace ? enteredSeconds * miles : enteredSeconds
+        let shown = mode == .pace ? total / miles : total
+        minutes = Int(shown) / 60
+        seconds = Int(shown.rounded()) % 60
     }
 
     private func label(for option: Double) -> String {
         if abs(option.rounded() - option) < 0.01 {
             return String(format: "%.0f mi", option)
         }
-        return String(format: "%.1f mi", option)
+        return String(format: "%.2f mi", option)
     }
 
-    /// Only one goal is active at a time, so saving a new goal archives the old
-    /// one. Its runs stay attached to it, so the history is not lost.
     private func save() {
-        if let existing = goalStore.activeGoal {
-            goalStore.archive(existing)
-        }
-        goalStore.add(
-            RunGoal(
-                title: "\(label(for: miles)) in \(targetDuration.clockText)",
+        if var existing = goal {
+            // Editing keeps runIDs, so correcting a target never costs history.
+            existing.distanceMeters = miles * metersPerMile
+            existing.targetDuration = targetDuration
+            goalStore.update(existing)
+        } else {
+            let created = RunGoal(
                 distanceMeters: miles * metersPerMile,
                 targetDuration: targetDuration
             )
-        )
+            goalStore.add(created)
+            goalStore.trackedGoalID = created.id
+        }
         dismiss()
     }
 }
@@ -571,27 +721,47 @@ private struct GoalApplyView: View {
     @EnvironmentObject private var store: RunStore
 
     var body: some View {
-        if let goal = goalStore.activeGoal {
-            if goalStore.contains(runID: record.id, in: goal),
-               let current = goalStore.goal(withID: goal.id),
-               let outcome = GoalEvaluation.outcome(forRunID: record.id, goal: current, records: store.records) {
-                GoalOutcomeBlurb(
-                    outcome: outcome,
-                    attempts: GoalEvaluation.attempts(for: current, in: store.records)
-                )
-            } else {
-                Button {
-                    goalStore.attach(runID: record.id, to: goal)
-                } label: {
-                    Label("Add to \(goal.title)", systemImage: "target")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(.mint.opacity(0.18), in: RoundedRectangle(cornerRadius: 18))
-                        .foregroundStyle(.mint)
+        if !goalStore.activeGoals.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("GOALS")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .tracking(1.2)
+
+                // Every goal is offered. A run can count towards more than one,
+                // and only the runner knows which ones it was meant for.
+                ForEach(goalStore.activeGoals) { goal in
+                    if goalStore.contains(runID: record.id, in: goal),
+                       let current = goalStore.goal(withID: goal.id),
+                       let outcome = GoalEvaluation.outcome(
+                           forRunID: record.id, goal: current, records: store.records
+                       ) {
+                        GoalOutcomeBlurb(
+                            outcome: outcome,
+                            attempts: GoalEvaluation.attempts(for: current, in: store.records)
+                        )
+                    } else {
+                        Button {
+                            goalStore.attach(runID: record.id, to: goal)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "target")
+                                Text("Add to \(goal.title)")
+                                Spacer()
+                                Image(systemName: "plus.circle.fill")
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 15)
+                            .frame(maxWidth: .infinity)
+                            .background(.mint.opacity(0.15), in: RoundedRectangle(cornerRadius: 16))
+                            .foregroundStyle(.mint)
+                        }
+                        .accessibilityHint("Counts this run towards the goal and shows how close you were")
+                    }
                 }
-                .accessibilityHint("Counts this run towards your goal and shows how close you were")
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
