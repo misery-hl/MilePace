@@ -208,6 +208,23 @@ enum VerifyGoalEngine {
         check(DistanceUnit.meters.text(forMeters: 400) == "400 m", "400 m reads exactly")
         check(DistanceUnit.yards.text(forMeters: 0.9144 * 220) == "220 yd", "220 yd reads exactly")
 
+        // Yards start at the 40 yard dash, which is why most people use yards.
+        check(DistanceUnit.yards.text(forMeters: DistanceUnit.yards.options[0]) == "40 yd",
+              "the yard picker starts at 40 yd")
+        check(DistanceUnit.yards.text(forMeters: DistanceUnit.yards.options[1]) == "50 yd",
+              "the yard picker then steps by 10")
+        for yards in [40.0, 100.0, 220.0, 440.0, 880.0, 1_760.0] {
+            check(DistanceUnit.yards.options.contains { nearly($0, 0.9144 * yards, tolerance: 0.001) },
+                  "\(Int(yards)) yd is on the picker")
+        }
+        check(DistanceUnit.yards.text(forMeters: DistanceUnit.yards.options.last ?? 0) == "5000 yd",
+              "the yard picker reaches 5000 yd")
+
+        // Every other unit still starts at one step.
+        check(nearly(DistanceUnit.meters.options[0], 50, tolerance: 0.001), "meters start at 50 m")
+        check(DistanceUnit.kilometers.text(forMeters: DistanceUnit.kilometers.options[0]) == "0.1 km",
+              "kilometres start at a tenth")
+
         // Every step is the same size, which is what the curated list got wrong.
         let mileSteps = DistanceUnit.miles.options
         let gaps = zip(mileSteps, mileSteps.dropFirst()).map { $1 - $0 }
