@@ -483,8 +483,9 @@ private struct GoalCard: View {
     /// A sprint has no useful pace per mile, so the card names the kind instead
     /// of printing a number nobody races to.
     private var subtitle: String {
-        guard goal.showsPace else { return "Sprint target" }
-        return "Target pace \(goal.targetPace.paceText) /mi"
+        // A named goal still has to say what it is, so the distance moves here.
+        let pace = goal.showsPace ? "Target pace \(goal.targetPace.paceText) /mi" : "Sprint target"
+        return goal.name.isEmpty ? pace : "\(goal.distanceText) · \(pace)"
     }
 
     private var bestLabel: String {
@@ -498,10 +499,12 @@ private struct GoalCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                // The distance leads, because the target time is already shown
-                // on the right. Repeating the whole goal title reads as noise.
-                Text(goal.distanceText)
+                // A name when there is one, otherwise the distance. The target
+                // time is already shown on the right, so repeating it here
+                // would read as noise.
+                Text(goal.name.isEmpty ? goal.distanceText : goal.name)
                     .font(.title3.bold())
+                    .lineLimit(1)
                 if isTracked {
                     Image(systemName: "location.fill")
                         .font(.caption2)
@@ -530,7 +533,7 @@ private struct GoalCard: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Edit \(goal.title)")
+                .accessibilityLabel("Edit \(goal.displayName)")
             }
 
             if let best, let gap {
@@ -593,7 +596,7 @@ private struct GoalCard: View {
     }
 
     private var accessibilitySummary: String {
-        var parts = ["\(goal.distanceText) in \(goal.targetDuration.clockText)"]
+        var parts = [goal.name.isEmpty ? goal.title : "\(goal.name), \(goal.title)"]
         if let best {
             parts.append("best so far \(best.goalDistanceDuration.clockText)")
         } else {
@@ -618,6 +621,7 @@ private struct GoalEditorView: View {
     @State private var mode: EntryMode
     @State private var minutes: Int
     @State private var seconds: Int
+    @State private var name: String
     @State private var isConfirmingDelete = false
     @State private var isSaving = false
 
@@ -648,6 +652,7 @@ private struct GoalEditorView: View {
         // became 5 min 00 s rather than 6 min 00 s, silently shrinking the goal.
         let wholeSeconds = Int(shown.rounded())
 
+        _name = State(initialValue: goal?.name ?? "")
         _distanceMeters = State(initialValue: startingUnit.sensibleOption(forMeters: meters))
         _unit = State(initialValue: startingUnit)
         _kind = State(initialValue: startingUnit.kind)
@@ -673,6 +678,10 @@ private struct GoalEditorView: View {
     private var targetPace: TimeInterval {
         guard miles > 0 else { return 0 }
         return targetDuration / miles
+    }
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The goal as currently entered, so the editor can judge it before saving.
@@ -701,6 +710,14 @@ private struct GoalEditorView: View {
                 Color.black.ignoresSafeArea()
 
                 VStack(spacing: 16) {
+                    TextField("Name (optional)", text: $name)
+                        .textInputAutocapitalization(.words)
+                        .font(.headline)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 13)
+                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                        .submitLabel(.done)
+
                     Picker("Kind", selection: $kind) {
                         ForEach(GoalKind.allCases) { option in
                             Text(option.title).tag(option)
@@ -840,10 +857,10 @@ private struct GoalEditorView: View {
     private var deleteWarning: String {
         guard let goal else { return "" }
         if attachedRunCount == 0 {
-            return "This removes \(goal.title). You have not added any runs to it."
+            return "This removes \(goal.displayName). You have not added any runs to it."
         }
         let runs = attachedRunCount == 1 ? "1 run" : "\(attachedRunCount) runs"
-        return "This removes \(goal.title) and its progress, including the \(runs) you added to it. "
+        return "This removes \(goal.displayName) and its progress, including the \(runs) you added to it. "
             + "The runs themselves stay in your history. This cannot be undone."
     }
 
@@ -866,12 +883,14 @@ private struct GoalEditorView: View {
 
         if var existing = goal {
             // Editing keeps runIDs, so correcting a target never costs history.
+            existing.name = trimmedName
             existing.distanceMeters = distanceMeters
             existing.targetDuration = targetDuration
             existing.distanceUnit = unit
             goalStore.update(existing)
         } else {
             let created = RunGoal(
+                name: trimmedName,
                 distanceMeters: distanceMeters,
                 targetDuration: targetDuration,
                 distanceUnit: unit
@@ -913,7 +932,7 @@ private struct LiveGoalRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
-                Text(goal.title.uppercased())
+                Text(goal.displayName.uppercased())
                     .font(.caption2.bold())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -973,7 +992,7 @@ private struct GoalApplyView: View {
                             // distance or time, so no comparison exists. Saying
                             // so beats re-offering a button that does nothing.
                             Label(
-                                "This run is too short to count towards \(goal.title).",
+                                "This run is too short to count towards \(goal.displayName).",
                                 systemImage: "exclamationmark.circle"
                             )
                             .font(.footnote)
@@ -989,7 +1008,7 @@ private struct GoalApplyView: View {
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "target")
-                                Text("Add to \(goal.title)")
+                                Text("Add to \(goal.displayName)")
                                 Spacer()
                                 Image(systemName: "plus.circle.fill")
                             }
@@ -1063,7 +1082,7 @@ private struct GoalOutcomeBlurb: View {
     private var headline: String {
         if outcome.reachedTarget { return "Goal reached" }
         if outcome.isPersonalBest && !outcome.isFirstAttempt { return "Your best yet" }
-        return "Added to \(outcome.goal.title)"
+        return "Added to \(outcome.goal.displayName)"
     }
 
     private var resultLine: String {
