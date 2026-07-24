@@ -109,6 +109,7 @@ The user wants proper source control, not direct commits to `main`:
 - Haptic feedback at completed miles.
 - Local JSON run history in Application Support.
 - Recent-run detail views with average pace and mile splits.
+- **Long press a run to add it to a goal, remove it from one, archive it, or delete it. Archived runs are hidden from the lists, still count towards their goals, and stay reachable. Deleting asks first and detaches the run from every goal.**
 - **Recorded GPS route persisted per run, and a dark route map on saved runs.**
 - **Goals: several at once. A goal is a run (miles or kilometres, entered as a total time or a pace per mile) or a sprint (metres or yards up to about a mile, entered as a total time only). Add, edit, and delete them, with a confirmation that states what is lost. A live projected finish for the goal being followed, and a summary comparing each added run with the target, the previous run, and the best run.**
 - **Elevation gain and loss per run, filtered so GPS altitude noise does not invent climb.**
@@ -254,7 +255,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 154 goal-engine checks
+Passed 164 goal-engine checks
 ```
 
 Also run:

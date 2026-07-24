@@ -93,6 +93,23 @@ final class GoalStore: ObservableObject {
         persist()
     }
 
+    /// Removes a run from every goal, for when the run itself is deleted.
+    /// A goal holding a missing identifier would silently drop an attempt and
+    /// quietly change its own best time.
+    func detachFromAllGoals(runID: UUID) {
+        var changed = false
+        for index in goals.indices where goals[index].runIDs.contains(runID) {
+            goals[index].runIDs.removeAll { $0 == runID }
+            changed = true
+        }
+        if changed { persist() }
+    }
+
+    /// Every active goal this run has been added to.
+    func goalsContaining(runID: UUID) -> [RunGoal] {
+        activeGoals.filter { $0.runIDs.contains(runID) }
+    }
+
     func goal(withID id: UUID) -> RunGoal? {
         goals.first { $0.id == id }
     }

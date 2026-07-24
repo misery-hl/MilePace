@@ -22,8 +22,30 @@ final class RunStore: ObservableObject {
         load()
     }
 
+    /// Runs the lists show. Archived runs are kept, but set aside.
+    var visibleRecords: [RunRecord] {
+        records.filter { !$0.isArchived }
+    }
+
+    var archivedRecords: [RunRecord] {
+        records.filter(\.isArchived)
+    }
+
     func save(_ record: RunRecord) {
         records.insert(record, at: 0)
+        persist()
+    }
+
+    func setArchived(_ archived: Bool, for record: RunRecord) {
+        guard let index = records.firstIndex(where: { $0.id == record.id }) else { return }
+        records[index].isArchived = archived
+        persist()
+    }
+
+    /// Deletes a run for good. The caller must also detach it from any goal, or
+    /// the goal would keep counting a run that no longer exists.
+    func delete(_ record: RunRecord) {
+        records.removeAll { $0.id == record.id }
         persist()
     }
 

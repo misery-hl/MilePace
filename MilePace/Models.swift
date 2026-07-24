@@ -85,6 +85,9 @@ struct RunRecord: Codable, Equatable, Identifiable {
     /// recorded, which is indistinguishable from a genuinely flat run.
     let elevationGainMeters: Double
     let elevationLossMeters: Double
+    /// Hidden from the run lists, but kept. A run worth setting aside is not
+    /// the same as a run worth destroying, and the history has no backup.
+    var isArchived: Bool
 
     init(
         id: UUID,
@@ -95,7 +98,8 @@ struct RunRecord: Codable, Equatable, Identifiable {
         mileSplits: [MileSplit],
         trackPoints: [TrackPoint] = [],
         elevationGainMeters: Double = 0,
-        elevationLossMeters: Double = 0
+        elevationLossMeters: Double = 0,
+        isArchived: Bool = false
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -106,6 +110,7 @@ struct RunRecord: Codable, Equatable, Identifiable {
         self.trackPoints = trackPoints
         self.elevationGainMeters = elevationGainMeters
         self.elevationLossMeters = elevationLossMeters
+        self.isArchived = isArchived
     }
 
     /// Decodes `trackPoints` leniently so run histories written before route
@@ -121,6 +126,7 @@ struct RunRecord: Codable, Equatable, Identifiable {
         trackPoints = try container.decodeIfPresent([TrackPoint].self, forKey: .trackPoints) ?? []
         elevationGainMeters = try container.decodeIfPresent(Double.self, forKey: .elevationGainMeters) ?? 0
         elevationLossMeters = try container.decodeIfPresent(Double.self, forKey: .elevationLossMeters) ?? 0
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
     }
 
     var distanceMiles: Double {
