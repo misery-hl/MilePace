@@ -100,7 +100,7 @@ private struct StartView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                if !store.records.isEmpty {
+                if !store.visibleRecords.isEmpty {
                     recentRuns
                 }
             }
@@ -116,21 +116,16 @@ private struct StartView: View {
                 .foregroundStyle(.secondary)
                 .tracking(1.2)
 
-            ForEach(store.records.prefix(5)) { record in
-                NavigationLink {
-                    SavedRunScreen(record: record)
-                } label: {
-                    RunRow(record: record)
-                }
-                .buttonStyle(.plain)
+            ForEach(store.visibleRecords.prefix(5)) { record in
+                RunRowLink(record: record)
             }
 
-            if store.records.count > 5 {
+            if store.visibleRecords.count > 5 || !store.archivedRecords.isEmpty {
                 NavigationLink {
                     AllRunsScreen()
                 } label: {
                     HStack {
-                        Text("See all \(store.records.count) runs")
+                        Text("See all \(store.visibleRecords.count) runs")
                         Spacer()
                         Image(systemName: "chevron.right")
                     }
@@ -145,6 +140,81 @@ private struct StartView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 10)
+    }
+}
+
+/// A run row with its long-press actions.
+///
+/// Deleting is guarded and archiving is not, because archiving is reversible
+/// and deleting is not: the history is local-first with no backup.
+private struct RunRowLink: View {
+    let record: RunRecord
+
+    @EnvironmentObject private var store: RunStore
+    @EnvironmentObject private var goalStore: GoalStore
+    @State private var isConfirmingDelete = false
+
+    var body: some View {
+        NavigationLink {
+            SavedRunScreen(record: record)
+        } label: {
+            RunRow(record: record)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            ForEach(goalStore.activeGoals) { goal in
+                if goalStore.contains(runID: record.id, in: goal) {
+                    Button {
+                        goalStore.detach(runID: record.id, from: goal)
+                    } label: {
+                        Label("Remove from \(goal.displayName)", systemImage: "minus.circle")
+                    }
+                } else {
+                    Button {
+                        goalStore.attach(runID: record.id, to: goal)
+                    } label: {
+                        Label("Add to \(goal.displayName)", systemImage: "target")
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                store.setArchived(!record.isArchived, for: record)
+            } label: {
+                Label(record.isArchived ? "Unarchive" : "Archive",
+                      systemImage: record.isArchived ? "tray.and.arrow.up" : "archivebox")
+            }
+
+            Button(role: .destructive) {
+                isConfirmingDelete = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .alert("Delete this run?", isPresented: $isConfirmingDelete) {
+            Button("Delete run", role: .destructive) {
+                // Detach first, so no goal is left counting a run that is gone.
+                goalStore.detachFromAllGoals(runID: record.id)
+                store.delete(record)
+            }
+            Button("Keep run", role: .cancel) {}
+        } message: {
+            Text(deleteWarning)
+        }
+    }
+
+    private var deleteWarning: String {
+        let distance = String(format: "%.2f mi", record.distanceMiles)
+        let goals = goalStore.goalsContaining(runID: record.id)
+        var message = "This deletes your \(distance) run from \(record.startedAt.formatted(date: .abbreviated, time: .shortened)). "
+
+        if !goals.isEmpty {
+            let names = goals.map(\.displayName).joined(separator: ", ")
+            message += "It also stops counting towards \(names). "
+        }
+        return message + "This cannot be undone. Archive it instead to hide it and keep it."
     }
 }
 
@@ -180,19 +250,70 @@ private struct AllRunsScreen: View {
             Color.black.ignoresSafeArea()
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(store.records) { record in
+                    ForEach(store.visibleRecords) { record in
+                        RunRowLink(record: record)
+                    }
+
+                    if !store.archivedRecords.isEmpty {
                         NavigationLink {
-                            SavedRunScreen(record: record)
+                            ArchivedRunsScreen()
                         } label: {
-                            RunRow(record: record)
+                            HStack {
+                                Label("Archived", systemImage: "archivebox")
+                                Spacer()
+                                Text("\(store.archivedRecords.count)")
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.vertical, 14)
+                            .padding(.horizontal, 16)
+                            .frame(maxWidth: .infinity)
+                            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
                         }
                         .buttonStyle(.plain)
+                        .padding(.top, 8)
                     }
                 }
                 .padding(20)
             }
         }
         .navigationTitle("All runs")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Archived runs, kept out of the way but never lost.
+private struct ArchivedRunsScreen: View {
+    @EnvironmentObject private var store: RunStore
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    if store.archivedRecords.isEmpty {
+                        Text("No archived runs.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text("Archived runs stay out of your lists, and still count towards any goal they were added to.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        ForEach(store.archivedRecords) { record in
+                            RunRowLink(record: record)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .navigationTitle("Archived")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -380,6 +380,51 @@ enum VerifyGoalEngine {
         check(preElevation?.count == 1, "a run saved before elevation still decodes")
         check(preElevation?.first?.elevationGainMeters == 0, "it decodes as flat")
 
+        // Deleting a run must not leave a goal counting it. A goal holding a
+        // missing identifier silently drops the attempt and changes its best.
+        let keptID = UUID(), goneID = UUID()
+        var withBoth = RunGoal(distanceMeters: twoMiles, targetDuration: 720)
+        withBoth.runIDs = [keptID, goneID]
+        let bothRecords = [
+            run(id: keptID, meters: twoMiles, seconds: 900, day: 0),
+            run(id: goneID, meters: twoMiles, seconds: 780, day: 3)
+        ]
+        check(GoalEvaluation.attempts(for: withBoth, in: bothRecords).count == 2,
+              "a goal counts both of its runs")
+        check(GoalEvaluation.best(for: withBoth, in: bothRecords)?.runID == goneID,
+              "the faster run is the best")
+
+        // Simulate the run being deleted without detaching it.
+        let onlyKept = [bothRecords[0]]
+        check(GoalEvaluation.attempts(for: withBoth, in: onlyKept).count == 1,
+              "a deleted run silently vanishes from the goal")
+        check(withBoth.runIDs.count == 2,
+              "but the goal still holds its identifier, which is why detaching matters")
+
+        // Detaching leaves the goal honest.
+        var detached = withBoth
+        detached.runIDs.removeAll { $0 == goneID }
+        check(detached.runIDs == [keptID], "detaching removes only the deleted run")
+        check(GoalEvaluation.best(for: detached, in: onlyKept)?.runID == keptID,
+              "the remaining run becomes the best")
+
+        // Archiving keeps a run and its goal membership.
+        let archived = RunRecord(id: keptID, startedAt: Date(), endedAt: Date(),
+                                 distanceMeters: twoMiles, activeDuration: 900,
+                                 mileSplits: [], isArchived: true)
+        check(archived.isArchived, "a run can be archived")
+        check(GoalEvaluation.attempts(for: detached, in: [archived]).count == 1,
+              "an archived run still counts towards its goal")
+
+        // Runs saved before archiving decode as not archived.
+        let preArchiveJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-00000000000E","startedAt":770000000,"endedAt":770000900,
+        "distanceMeters":5000,"activeDuration":900,"mileSplits":[]}]
+        """
+        let preArchive = try? JSONDecoder().decode([RunRecord].self, from: Data(preArchiveJSON.utf8))
+        check(preArchive?.count == 1, "a run saved before archiving still decodes")
+        check(preArchive?.first?.isArchived == false, "it decodes as not archived")
+
         // Only the absurd is rejected. Checked as a speed so one rule covers
         // a 40 yard dash and a marathon.
         check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).isPlausible,
