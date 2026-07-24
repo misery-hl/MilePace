@@ -81,6 +81,10 @@ struct RunRecord: Codable, Equatable, Identifiable {
     let mileSplits: [MileSplit]
     /// Recorded route. Empty for runs saved before route recording existed.
     let trackPoints: [TrackPoint]
+    /// Climb and descent in metres. Zero for runs saved before elevation was
+    /// recorded, which is indistinguishable from a genuinely flat run.
+    let elevationGainMeters: Double
+    let elevationLossMeters: Double
 
     init(
         id: UUID,
@@ -89,7 +93,9 @@ struct RunRecord: Codable, Equatable, Identifiable {
         distanceMeters: Double,
         activeDuration: TimeInterval,
         mileSplits: [MileSplit],
-        trackPoints: [TrackPoint] = []
+        trackPoints: [TrackPoint] = [],
+        elevationGainMeters: Double = 0,
+        elevationLossMeters: Double = 0
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -98,6 +104,8 @@ struct RunRecord: Codable, Equatable, Identifiable {
         self.activeDuration = activeDuration
         self.mileSplits = mileSplits
         self.trackPoints = trackPoints
+        self.elevationGainMeters = elevationGainMeters
+        self.elevationLossMeters = elevationLossMeters
     }
 
     /// Decodes `trackPoints` leniently so run histories written before route
@@ -111,6 +119,8 @@ struct RunRecord: Codable, Equatable, Identifiable {
         activeDuration = try container.decode(TimeInterval.self, forKey: .activeDuration)
         mileSplits = try container.decode([MileSplit].self, forKey: .mileSplits)
         trackPoints = try container.decodeIfPresent([TrackPoint].self, forKey: .trackPoints) ?? []
+        elevationGainMeters = try container.decodeIfPresent(Double.self, forKey: .elevationGainMeters) ?? 0
+        elevationLossMeters = try container.decodeIfPresent(Double.self, forKey: .elevationLossMeters) ?? 0
     }
 
     var distanceMiles: Double {
@@ -163,6 +173,16 @@ struct RunRecord: Codable, Equatable, Identifiable {
 
     var fastestMile: MileSplit? {
         mileSplits.min(by: { $0.duration < $1.duration })
+    }
+
+    var elevationGainFeet: Double {
+        elevationGainMeters * 3.280839895
+    }
+
+    /// Whether the run climbed enough to be worth reporting. A flat road run
+    /// accumulates a little noise even after filtering, and "4 ft" is clutter.
+    var hasMeaningfulElevation: Bool {
+        elevationGainFeet >= 20
     }
 }
 

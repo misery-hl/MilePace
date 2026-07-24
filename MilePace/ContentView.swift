@@ -94,6 +94,8 @@ private struct StartView: View {
 
                 GoalsSection()
 
+                CompactMetricPicker()
+
                 Label("Runs stay on this iPhone", systemImage: "lock.fill")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -314,6 +316,18 @@ private struct RunDashboardView: View {
             .font(.headline)
         }
         .padding(20)
+        .onAppear { publishGoalContext() }
+        .onChange(of: goalStore.trackedGoal?.id) { _, _ in publishGoalContext() }
+    }
+
+    /// Hands the followed goal to the tracker, so the Lock Screen can show the
+    /// same ahead or behind figure this screen does.
+    private func publishGoalContext() {
+        if let goal = goalStore.trackedGoal {
+            tracker.goalContext = (goal.displayName, goal.targetDuration, goal.distanceMeters)
+        } else {
+            tracker.goalContext = nil
+        }
     }
 }
 
@@ -369,6 +383,19 @@ private struct RunDetailView: View {
                 MetricCard(title: "AVG PACE", value: record.averagePace?.paceText ?? "--:--", unit: "/mi")
             }
 
+            if record.hasMeaningfulElevation {
+                HStack {
+                    Label("Elevation gain", systemImage: "arrow.up.right")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(String(format: "%.0f ft", record.elevationGainFeet))
+                        .font(.headline.monospacedDigit())
+                }
+                .padding()
+                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            }
+
             if record.mileSplits.isEmpty {
                 Text("Complete a mile to record your first split.")
                     .font(.subheadline)
@@ -397,6 +424,36 @@ private struct RunDetailView: View {
         }
         .navigationTitle("Run")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Chooses the single figure the Dynamic Island shows while collapsed.
+private struct CompactMetricPicker: View {
+    @EnvironmentObject private var tracker: RunTracker
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("DYNAMIC ISLAND")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+                .tracking(1.2)
+
+            Picker("Dynamic Island shows", selection: Binding(
+                get: { tracker.compactMetric },
+                set: { tracker.compactMetric = $0 }
+            )) {
+                ForEach(CompactMetric.allCases) { metric in
+                    Text(metric.title).tag(metric)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text("The collapsed island fits one figure. The Lock Screen shows pace, distance, time, and climb.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -334,6 +334,52 @@ enum VerifyGoalEngine {
         check(older?.first?.name.isEmpty == true, "it decodes as unnamed")
         check(older?.first?.displayName == "2 mi in 12:00", "and still reads the same")
 
+        // Elevation is filtered: GPS altitude wanders several metres even when
+        // the phone is still, so counting every change would invent climb.
+        var climb = RunAccumulator()
+        climb.recordAltitude(100, verticalAccuracy: 5)
+        climb.recordAltitude(101, verticalAccuracy: 5)
+        climb.recordAltitude(102, verticalAccuracy: 5)
+        check(climb.elevationGainMeters == 0, "noise below the threshold is not counted as climb")
+        climb.recordAltitude(105, verticalAccuracy: 5)
+        check(nearly(climb.elevationGainMeters, 5, tolerance: 0.001), "a real climb is counted in full")
+        climb.recordAltitude(100, verticalAccuracy: 5)
+        check(nearly(climb.elevationLossMeters, 5, tolerance: 0.001), "a descent is counted separately")
+        check(nearly(climb.elevationGainMeters, 5, tolerance: 0.001), "a descent does not reduce the climb")
+
+        var invalid = RunAccumulator()
+        invalid.recordAltitude(100, verticalAccuracy: -1)
+        invalid.recordAltitude(200, verticalAccuracy: -1)
+        check(invalid.elevationGainMeters == 0, "an invalid altitude reading is ignored")
+        var imprecise = RunAccumulator()
+        imprecise.recordAltitude(100, verticalAccuracy: 50)
+        imprecise.recordAltitude(200, verticalAccuracy: 50)
+        check(imprecise.elevationGainMeters == 0, "an imprecise altitude reading is ignored")
+
+        // A steady climb accumulates even in small steps, because the threshold
+        // is measured from the last counted altitude, not the previous sample.
+        var steady = RunAccumulator()
+        for i in 0...40 { steady.recordAltitude(100 + Double(i), verticalAccuracy: 5) }
+        check(steady.elevationGainMeters >= 36, "a steady climb accumulates in full")
+
+        // A run reports elevation only when there is enough to be worth saying.
+        let flat = RunRecord(id: UUID(), startedAt: Date(), endedAt: Date(), distanceMeters: 5_000,
+                             activeDuration: 1_500, mileSplits: [], elevationGainMeters: 2)
+        check(!flat.hasMeaningfulElevation, "a flat run reports no elevation")
+        let hilly = RunRecord(id: UUID(), startedAt: Date(), endedAt: Date(), distanceMeters: 5_000,
+                              activeDuration: 1_500, mileSplits: [], elevationGainMeters: 120)
+        check(hilly.hasMeaningfulElevation, "a hilly run reports its elevation")
+        check(nearly(hilly.elevationGainFeet, 393.7, tolerance: 0.5), "metres convert to feet")
+
+        // Runs saved before elevation existed decode as flat.
+        let preElevationJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-00000000000D","startedAt":770000000,"endedAt":770000900,
+        "distanceMeters":5000,"activeDuration":900,"mileSplits":[]}]
+        """
+        let preElevation = try? JSONDecoder().decode([RunRecord].self, from: Data(preElevationJSON.utf8))
+        check(preElevation?.count == 1, "a run saved before elevation still decodes")
+        check(preElevation?.first?.elevationGainMeters == 0, "it decodes as flat")
+
         // Only the absurd is rejected. Checked as a speed so one rule covers
         // a 40 yard dash and a marathon.
         check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).isPlausible,

@@ -111,6 +111,8 @@ The user wants proper source control, not direct commits to `main`:
 - Recent-run detail views with average pace and mile splits.
 - **Recorded GPS route persisted per run, and a dark route map on saved runs.**
 - **Goals: several at once. A goal is a run (miles or kilometres, entered as a total time or a pace per mile) or a sprint (metres or yards up to about a mile, entered as a total time only). Add, edit, and delete them, with a confirmation that states what is lost. A live projected finish for the goal being followed, and a summary comparing each added run with the target, the previous run, and the best run.**
+- **Elevation gain and loss per run, filtered so GPS altitude noise does not invent climb.**
+- **A Live Activity on the Lock Screen and in the Dynamic Island while a run is active.**
 - Post-run social share card and native iOS share sheet.
 - Privacy manifest declaring no tracking or collected/transmitted data.
 - 1024x1024 opaque app icon and an icon-generation utility.
@@ -140,6 +142,12 @@ The user wants proper source control, not direct commits to `main`:
   - Framework-independent executable checks for environments where XCTest is unavailable.
 - `Tools/GenerateAppIcon.swift`
   - Rebuilds the app icon with Core Graphics.
+- `MilePace/RunActivityAttributes.swift`
+  - The Live Activity contract. **Compiled into both the app and the widget extension**, which are separate processes, so everything the widget draws must arrive through `ContentState`.
+- `MilePace/RunActivityController.swift`
+  - Starts, updates, and ends the Live Activity. Rate limits updates, because iOS drops them when pushed too often.
+- `MilePaceWidgets/`
+  - The widget extension target: Lock Screen and Dynamic Island presentations. Bundle identifier `com.misery.MilePace.Widgets`.
 - `.claude/skills/sim-preview/`
   - Skill for previewing UI changes in the iOS Simulator with synthetic data. See below.
 
@@ -246,7 +254,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 142 goal-engine checks
+Passed 154 goal-engine checks
 ```
 
 Also run:

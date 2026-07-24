@@ -9,8 +9,40 @@ struct RunAccumulator {
 
     private(set) var totalDistanceMeters: Double = 0
     private(set) var mileSplits: [MileSplit] = []
+    private(set) var elevationGainMeters: Double = 0
+    private(set) var elevationLossMeters: Double = 0
     private var lastSplitElapsed: TimeInterval = 0
     private var rollingPoints: [DistancePoint] = [DistancePoint(elapsed: 0, distanceMeters: 0)]
+    private var lastCountedAltitude: Double?
+
+    /// GPS altitude is far noisier than GPS position. A stationary phone can
+    /// wander several metres vertically, so counting every change would invent
+    /// hundreds of feet of climb on a flat road. Only movement past this
+    /// threshold counts, measured from the last altitude actually counted
+    /// rather than from the previous sample, so a steady climb still
+    /// accumulates in full.
+    static let elevationThresholdMeters: Double = 3
+
+    mutating func recordAltitude(_ altitude: Double, verticalAccuracy: Double) {
+        // A negative vertical accuracy means the reading is invalid. A large
+        // one means it is not worth trusting for a 3 m threshold.
+        guard verticalAccuracy > 0, verticalAccuracy <= 10, altitude.isFinite else { return }
+
+        guard let last = lastCountedAltitude else {
+            lastCountedAltitude = altitude
+            return
+        }
+
+        let change = altitude - last
+        guard abs(change) >= Self.elevationThresholdMeters else { return }
+
+        if change > 0 {
+            elevationGainMeters += change
+        } else {
+            elevationLossMeters -= change
+        }
+        lastCountedAltitude = altitude
+    }
 
     var currentMileNumber: Int {
         mileSplits.count + 1
