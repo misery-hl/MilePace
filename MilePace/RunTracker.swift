@@ -13,6 +13,7 @@ final class RunTracker: NSObject, ObservableObject {
     @Published private(set) var averagePace: TimeInterval?
     @Published private(set) var currentMileNumber = 1
     @Published private(set) var currentMileProgress = 0.0
+    @Published private(set) var elevationGainMeters: Double = 0
     @Published private(set) var lastRun: RunRecord?
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
     @Published private(set) var usesReducedAccuracy = false
@@ -36,6 +37,22 @@ final class RunTracker: NSObject, ObservableObject {
     private var segmentIndex = 0
     private var lastAcceptedFixAt: Date?
     private var lastRejectionReason: FixRejection?
+    private let activityController = RunActivityController()
+
+    /// Which figure the Dynamic Island shows when collapsed.
+    var compactMetric: CompactMetric {
+        get { activityController.compactMetric }
+        set {
+            activityController.compactMetric = newValue
+            objectWillChange.send()
+            // Push at once so the Island changes while the runner is looking.
+            activityController.update(activityState(), force: true)
+        }
+    }
+
+    /// Set by the view layer when the followed goal changes, so the Lock Screen
+    /// can show the same ahead or behind figure the running screen does.
+    var goalContext: (name: String, targetDuration: TimeInterval, distanceMeters: Double)?
 
     /// Why a GPS fix was discarded. Each one is silent on its own, and each one
     /// can persist for a whole run, so the runner has to be told.
@@ -102,6 +119,7 @@ final class RunTracker: NSObject, ObservableObject {
         accumulator.resetRollingWindow(at: accumulatedActiveDuration)
         UIApplication.shared.isIdleTimerDisabled = false
         refreshNow()
+        activityController.update(activityState(), force: true)
     }
 
     func resume() {
@@ -115,6 +133,7 @@ final class RunTracker: NSObject, ObservableObject {
         startLocationUpdates()
         startTimer()
         UIApplication.shared.isIdleTimerDisabled = true
+        activityController.update(activityState(), force: true)
     }
 
     func finish() {
@@ -138,11 +157,14 @@ final class RunTracker: NSObject, ObservableObject {
             // Thin before saving. Fixes arrive every 2 m, which the distance
             // maths needs but the stored route does not, and the whole history
             // is rewritten on every save.
-            trackPoints: RouteThinning.thin(trackPoints)
+            trackPoints: RouteThinning.thin(trackPoints),
+            elevationGainMeters: accumulator.elevationGainMeters,
+            elevationLossMeters: accumulator.elevationLossMeters
         )
         store.save(record)
         lastRun = record
         phase = .finished
+        activityController.end(finalState: activityState())
     }
 
     func dismissSummary() {
@@ -162,6 +184,45 @@ final class RunTracker: NSObject, ObservableObject {
         averagePace = accumulator.averagePace(at: currentElapsed)
         currentMileNumber = accumulator.currentMileNumber
         currentMileProgress = accumulator.currentMileProgress
+        elevationGainMeters = accumulator.elevationGainMeters
+
+        if phase == .running || phase == .paused {
+            // Rate limited inside the controller, so calling this on every
+            // refresh is safe.
+            activityController.update(activityState())
+        }
+    }
+
+    /// The live run, as the Lock Screen and Dynamic Island see it.
+    private func activityState() -> RunActivityAttributes.ContentState {
+        var goalName: String?
+        var goalDelta: Double?
+
+        if let goalContext, goalContext.distanceMeters > 0 {
+            goalName = goalContext.name
+            // Same rule as the running screen: no projection once the goal
+            // distance is behind the runner, because scaling it back down
+            // describes a performance that already finished.
+            if accumulator.totalDistanceMeters >= 160,
+               accumulator.totalDistanceMeters < goalContext.distanceMeters {
+                let ratio = goalContext.distanceMeters / accumulator.totalDistanceMeters
+                let projected = elapsed * pow(ratio, 1.06)
+                if projected.isFinite {
+                    goalDelta = projected - goalContext.targetDuration
+                }
+            }
+        }
+
+        return RunActivityAttributes.ContentState(
+            paceSeconds: currentMilePace ?? rollingPace ?? averagePace,
+            distanceMeters: accumulator.totalDistanceMeters,
+            elapsed: elapsed,
+            elevationGainMeters: accumulator.elevationGainMeters,
+            isPaused: phase == .paused,
+            compactMetric: activityController.compactMetric,
+            goalName: goalName,
+            goalDeltaSeconds: goalDelta
+        )
     }
 
     private func beginRun() {
@@ -184,6 +245,7 @@ final class RunTracker: NSObject, ObservableObject {
         startLocationUpdates()
         startTimer()
         UIApplication.shared.isIdleTimerDisabled = true
+        activityController.start(startedAt: now, state: activityState())
     }
 
     private func startLocationUpdates() {
@@ -281,6 +343,7 @@ extension RunTracker: @preconcurrency CLLocationManagerDelegate {
             guard locationElapsed >= accumulatedActiveDuration else { continue }
 
             noteAcceptedFix()
+            accumulator.recordAltitude(location.altitude, verticalAccuracy: location.verticalAccuracy)
 
             trackPoints.append(
                 TrackPoint(

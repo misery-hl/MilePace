@@ -14,6 +14,8 @@ let package = Package(
             exclude: [
                 "Assets.xcassets",
                 "ContentView.swift",
+                "RunActivityAttributes.swift",
+                "RunActivityController.swift",
                 "GoalStore.swift",
                 "Info.plist",
                 "MilePaceApp.swift",

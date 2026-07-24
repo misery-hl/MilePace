@@ -15,6 +15,13 @@
 		B00000000000000000000006 /* RunTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000006 /* RunTracker.swift */; };
 		B0000000000000000000000B /* PacePrediction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000E /* PacePrediction.swift */; };
 		B0000000000000000000000C /* GoalStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000F /* GoalStore.swift */; };
+		B0000000000000000000000D /* RunActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000010 /* RunActivityAttributes.swift */; };
+		B0000000000000000000000E /* RunActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011 /* RunActivityController.swift */; };
+		B0000000000000000000000F /* RunActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000010 /* RunActivityAttributes.swift */; };
+		B00000000000000000000010 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000003 /* Models.swift */; };
+		B00000000000000000000011 /* RunLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* RunLiveActivity.swift */; };
+		B00000000000000000000012 /* MilePaceWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000013 /* MilePaceWidgetsBundle.swift */; };
+		B00000000000000000000013 /* MilePaceWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A00000000000000000000015 /* MilePaceWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B00000000000000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* Assets.xcassets */; };
 		B00000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000009 /* RunAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000A /* RunAccumulatorTests.swift */; };
@@ -29,6 +36,13 @@
 			remoteGlobalIDString = C00000000000000000000001;
 			remoteInfo = MilePace;
 		};
+		D00000000000000000000004 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C00000000000000000000003;
+			remoteInfo = MilePaceWidgets;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +54,12 @@
 		A00000000000000000000006 /* RunTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunTracker.swift; sourceTree = "<group>"; };
 		A0000000000000000000000E /* PacePrediction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacePrediction.swift; sourceTree = "<group>"; };
 		A0000000000000000000000F /* GoalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoalStore.swift; sourceTree = "<group>"; };
+		A00000000000000000000010 /* RunActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunActivityAttributes.swift; sourceTree = "<group>"; };
+		A00000000000000000000011 /* RunActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunActivityController.swift; sourceTree = "<group>"; };
+		A00000000000000000000012 /* RunLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunLiveActivity.swift; sourceTree = "<group>"; };
+		A00000000000000000000013 /* MilePaceWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MilePaceWidgetsBundle.swift; sourceTree = "<group>"; };
+		A00000000000000000000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A00000000000000000000015 /* MilePaceWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MilePaceWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00000000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A00000000000000000000009 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -73,6 +93,7 @@
 			children = (
 				F00000000000000000000003 /* MilePace */,
 				F00000000000000000000004 /* MilePaceTests */,
+				F00000000000000000000007 /* MilePaceWidgets */,
 				F00000000000000000000005 /* Frameworks */,
 				F00000000000000000000006 /* Products */,
 			);
@@ -86,6 +107,8 @@
 				A00000000000000000000003 /* Models.swift */,
 				A00000000000000000000004 /* RunAccumulator.swift */,
 				A00000000000000000000005 /* RunStore.swift */,
+				A00000000000000000000010 /* RunActivityAttributes.swift */,
+				A00000000000000000000011 /* RunActivityController.swift */,
 				A0000000000000000000000F /* GoalStore.swift */,
 				A0000000000000000000000E /* PacePrediction.swift */,
 				A00000000000000000000006 /* RunTracker.swift */,
@@ -94,6 +117,16 @@
 				A00000000000000000000009 /* PrivacyInfo.xcprivacy */,
 			);
 			path = MilePace;
+			sourceTree = "<group>";
+		};
+		F00000000000000000000007 /* MilePaceWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000013 /* MilePaceWidgetsBundle.swift */,
+				A00000000000000000000012 /* RunLiveActivity.swift */,
+				A00000000000000000000014 /* Info.plist */,
+			);
+			path = MilePaceWidgets;
 			sourceTree = "<group>";
 		};
 		F00000000000000000000004 /* MilePaceTests */ = {
@@ -117,6 +150,7 @@
 			children = (
 				A0000000000000000000000C /* MilePace.app */,
 				A0000000000000000000000D /* MilePaceTests.xctest */,
+				A00000000000000000000015 /* MilePaceWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -131,10 +165,12 @@
 				E00000000000000000000003 /* Sources */,
 				E00000000000000000000001 /* Frameworks */,
 				E00000000000000000000004 /* Resources */,
+				E00000000000000000000008 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D00000000000000000000003 /* PBXTargetDependency */,
 			);
 			name = MilePace;
 			productName = MilePace;
@@ -158,6 +194,21 @@
 			productName = MilePaceTests;
 			productReference = A0000000000000000000000D /* MilePaceTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C00000000000000000000003 /* MilePaceWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C00000000000000000000013 /* Build configuration list for PBXNativeTarget "MilePaceWidgets" */;
+			buildPhases = (
+				E00000000000000000000007 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MilePaceWidgets;
+			productName = MilePaceWidgets;
+			productReference = A00000000000000000000015 /* MilePaceWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -193,6 +244,7 @@
 			targets = (
 				C00000000000000000000001 /* MilePace */,
 				C00000000000000000000002 /* MilePaceTests */,
+				C00000000000000000000003 /* MilePaceWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -226,6 +278,8 @@
 				B00000000000000000000003 /* Models.swift in Sources */,
 				B00000000000000000000004 /* RunAccumulator.swift in Sources */,
 				B00000000000000000000005 /* RunStore.swift in Sources */,
+				B0000000000000000000000D /* RunActivityAttributes.swift in Sources */,
+				B0000000000000000000000E /* RunActivityController.swift in Sources */,
 				B0000000000000000000000C /* GoalStore.swift in Sources */,
 				B0000000000000000000000B /* PacePrediction.swift in Sources */,
 				B00000000000000000000006 /* RunTracker.swift in Sources */,
@@ -240,13 +294,43 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E00000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000012 /* MilePaceWidgetsBundle.swift in Sources */,
+				B00000000000000000000011 /* RunLiveActivity.swift in Sources */,
+				B0000000000000000000000F /* RunActivityAttributes.swift in Sources */,
+				B00000000000000000000010 /* Models.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E00000000000000000000008 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B00000000000000000000013 /* MilePaceWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
 		D00000000000000000000002 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = C00000000000000000000001 /* MilePace */;
 			targetProxy = D00000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		D00000000000000000000003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C00000000000000000000003 /* MilePaceWidgets */;
+			targetProxy = D00000000000000000000004 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -432,6 +516,62 @@
 			};
 			name = Release;
 		};
+		C00000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LLJC47G33R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MilePaceWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MilePace;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.misery.MilePace.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		C0000000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = LLJC47G33R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MilePaceWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MilePace;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.misery.MilePace.Widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -458,6 +598,15 @@
 			buildConfigurations = (
 				C00000000000000000000024 /* Debug */,
 				C00000000000000000000025 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C00000000000000000000013 /* Build configuration list for PBXNativeTarget "MilePaceWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C00000000000000000000009 /* Debug */,
+				C0000000000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
