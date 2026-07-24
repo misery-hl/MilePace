@@ -355,6 +355,7 @@ struct RunGoal: Codable, Equatable, Identifiable {
     init(
         id: UUID = UUID(),
         createdAt: Date = Date(),
+        name: String = "",
         distanceMeters: Double,
         targetDuration: TimeInterval,
         runIDs: [UUID] = [],
@@ -363,6 +364,7 @@ struct RunGoal: Codable, Equatable, Identifiable {
     ) {
         self.id = id
         self.createdAt = createdAt
+        self.name = name
         self.distanceMeters = distanceMeters
         self.targetDuration = targetDuration
         self.runIDs = runIDs
@@ -382,12 +384,27 @@ struct RunGoal: Codable, Equatable, Identifiable {
         runIDs = try container.decodeIfPresent([UUID].self, forKey: .runIDs) ?? []
         isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
         distanceUnit = try container.decodeIfPresent(DistanceUnit.self, forKey: .distanceUnit) ?? .miles
+        // Goals saved before naming existed have no name, which is the same as
+        // an unnamed goal, so they need no migration.
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
     }
 
-    /// Derived rather than stored, so editing a goal cannot leave a stale name
-    /// behind. Older saved goals carry a `title` key, which decoding ignores.
+    /// What the goal is for, in the runner's own words. Empty means unnamed.
+    ///
+    /// Two goals at the same distance are otherwise indistinguishable, and a
+    /// name says why a goal exists in a way a distance never can.
+    var name: String
+
+    /// The distance and target, always. This is what the goal *is*, and it stays
+    /// derived so editing can never leave a stale description behind.
     var title: String {
         "\(distanceText) in \(targetDuration.clockText)"
+    }
+
+    /// What to call the goal in a sentence: the name when there is one, and the
+    /// distance and target when there is not.
+    var displayName: String {
+        name.isEmpty ? title : name
     }
 
     var distanceMiles: Double {

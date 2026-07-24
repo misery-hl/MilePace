@@ -315,6 +315,25 @@ enum VerifyGoalEngine {
                   "the \(unit.shortName) default is on its own wheel")
         }
 
+        // A name never replaces what the goal is; it only adds why it exists.
+        let named = RunGoal(name: "Turkey Trot", distanceMeters: 5_000,
+                            targetDuration: 1_500, distanceUnit: .kilometers)
+        check(named.title == "5 km in 25:00", "a named goal keeps its distance and target as its title")
+        check(named.displayName == "Turkey Trot", "a named goal is called by its name")
+        let unnamed = RunGoal(distanceMeters: 5_000, targetDuration: 1_500, distanceUnit: .kilometers)
+        check(unnamed.displayName == "5 km in 25:00", "an unnamed goal falls back to its title")
+        check(unnamed.name.isEmpty, "an unnamed goal has an empty name")
+
+        // Goals saved before naming existed decode as unnamed.
+        let unnamedJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-00000000000C","createdAt":770000000,
+        "distanceMeters":3218.688,"targetDuration":720,"runIDs":[],"isArchived":false}]
+        """
+        let older = try? JSONDecoder().decode([RunGoal].self, from: Data(unnamedJSON.utf8))
+        check(older?.count == 1, "a goal saved before naming still decodes")
+        check(older?.first?.name.isEmpty == true, "it decodes as unnamed")
+        check(older?.first?.displayName == "2 mi in 12:00", "and still reads the same")
+
         // Only the absurd is rejected. Checked as a speed so one rule covers
         // a 40 yard dash and a marathon.
         check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).isPlausible,
