@@ -338,11 +338,25 @@ struct RoutesSection: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(routeStore.routes) { route in
+                ForEach(routeStore.visibleRoutes) { route in
+                    RouteRowLink(route: route)
+                }
+
+                if !routeStore.archivedRoutes.isEmpty {
                     NavigationLink {
-                        RouteDetailView(route: route)
+                        ArchivedRoutesScreen()
                     } label: {
-                        RouteRow(route: route)
+                        HStack {
+                            Label("Archived", systemImage: "archivebox")
+                            Spacer()
+                            Text("\(routeStore.archivedRoutes.count)").foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity)
+                        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14))
                     }
                     .buttonStyle(.plain)
                 }
@@ -350,6 +364,59 @@ struct RoutesSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(isPresented: $isBuilding) { RouteBuilderView() }
+    }
+}
+
+/// A route row with its long-press actions, mirroring the run rows: rename,
+/// archive, delete. Delete is guarded; archive is not, because it is
+/// reversible.
+struct RouteRowLink: View {
+    let route: PlannedRoute
+
+    @EnvironmentObject private var routeStore: RouteStore
+    @State private var isConfirmingDelete = false
+    @State private var isRenaming = false
+    @State private var draftName = ""
+
+    var body: some View {
+        NavigationLink {
+            RouteDetailView(route: route)
+        } label: {
+            RouteRow(route: route)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                draftName = route.name
+                isRenaming = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+
+            Button {
+                routeStore.setArchived(!route.isArchived, for: route)
+            } label: {
+                Label(route.isArchived ? "Unarchive" : "Archive",
+                      systemImage: route.isArchived ? "tray.and.arrow.up" : "archivebox")
+            }
+
+            Button(role: .destructive) {
+                isConfirmingDelete = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .alert("Name this route", isPresented: $isRenaming) {
+            TextField("Name", text: $draftName)
+            Button("Save") { routeStore.rename(route, to: draftName) }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Delete this route?", isPresented: $isConfirmingDelete) {
+            Button("Delete route", role: .destructive) { routeStore.delete(route) }
+            Button("Keep route", role: .cancel) {}
+        } message: {
+            Text("This removes \(route.displayName). Your runs are not affected. Archive it instead to hide it and keep it.")
+        }
     }
 }
 
@@ -378,6 +445,34 @@ private struct RouteRow: View {
         }
         .padding(12)
         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+/// Archived routes, kept out of the way but never lost.
+private struct ArchivedRoutesScreen: View {
+    @EnvironmentObject private var routeStore: RouteStore
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    if routeStore.archivedRoutes.isEmpty {
+                        Text("No archived routes.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        ForEach(routeStore.archivedRoutes) { route in
+                            RouteRowLink(route: route)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .navigationTitle("Archived routes")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

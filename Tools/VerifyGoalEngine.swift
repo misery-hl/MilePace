@@ -476,6 +476,18 @@ enum VerifyGoalEngine {
         let unnamedRoute = PlannedRoute(origin: .drawn, line: square)
         check(unnamedRoute.displayName.contains("mi route"), "an unnamed route shows its distance")
 
+        // Archiving a route keeps it. Routes saved before archiving decode as
+        // not archived, so an old routes.json keeps loading.
+        check(drawn.isArchived == false, "a new route is not archived")
+        let archivedRouteJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-00000000000F","createdAt":770000000,"name":"Old",
+        "origin":"drawn","waypoints":[],"line":[{"latitude":40.0,"longitude":-75.0},{"latitude":40.001,"longitude":-75.0}]}]
+        """
+        let oldRoutes = try? JSONDecoder().decode([PlannedRoute].self, from: Data(archivedRouteJSON.utf8))
+        check(oldRoutes?.count == 1, "a route saved before archiving still decodes")
+        check(oldRoutes?.first?.isArchived == false, "it decodes as not archived")
+        check(oldRoutes?.first?.name == "Old", "and keeps its name")
+
         // Only the absurd is rejected. Checked as a speed so one rule covers
         // a 40 yard dash and a marathon.
         check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).isPlausible,

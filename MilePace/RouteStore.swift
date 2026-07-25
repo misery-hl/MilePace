@@ -20,6 +20,15 @@ final class RouteStore: ObservableObject {
         load()
     }
 
+    /// Routes the list shows. Archived routes are kept, but set aside.
+    var visibleRoutes: [PlannedRoute] {
+        routes.filter { !$0.isArchived }
+    }
+
+    var archivedRoutes: [PlannedRoute] {
+        routes.filter(\.isArchived)
+    }
+
     func add(_ route: PlannedRoute) {
         routes.insert(route, at: 0)
         persist()
@@ -28,6 +37,12 @@ final class RouteStore: ObservableObject {
     func rename(_ route: PlannedRoute, to name: String) {
         guard let index = routes.firstIndex(where: { $0.id == route.id }) else { return }
         routes[index].name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        persist()
+    }
+
+    func setArchived(_ archived: Bool, for route: PlannedRoute) {
+        guard let index = routes.firstIndex(where: { $0.id == route.id }) else { return }
+        routes[index].isArchived = archived
         persist()
     }
 

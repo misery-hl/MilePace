@@ -218,6 +218,8 @@ struct PlannedRoute: Codable, Equatable, Identifiable {
     let waypoints: [RoutePoint]
     /// The full path to draw and follow.
     let line: [RoutePoint]
+    /// Hidden from the list but kept, the same as an archived run.
+    var isArchived: Bool
 
     init(
         id: UUID = UUID(),
@@ -225,7 +227,8 @@ struct PlannedRoute: Codable, Equatable, Identifiable {
         name: String = "",
         origin: Origin,
         waypoints: [RoutePoint] = [],
-        line: [RoutePoint]
+        line: [RoutePoint],
+        isArchived: Bool = false
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -233,6 +236,20 @@ struct PlannedRoute: Codable, Equatable, Identifiable {
         self.origin = origin
         self.waypoints = waypoints
         self.line = line
+        self.isArchived = isArchived
+    }
+
+    /// Decodes `isArchived` leniently, so routes saved before archiving keep
+    /// loading instead of failing the whole file.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        name = try container.decode(String.self, forKey: .name)
+        origin = try container.decode(Origin.self, forKey: .origin)
+        waypoints = try container.decode([RoutePoint].self, forKey: .waypoints)
+        line = try container.decode([RoutePoint].self, forKey: .line)
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
     }
 
     var distanceMeters: Double {
