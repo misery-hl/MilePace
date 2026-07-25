@@ -12,6 +12,52 @@ extension RoutePoint {
     }
 }
 
+/// A one-shot current location, used to open the route builder on where the
+/// runner is standing rather than on a fixed fallback. Publishes a `RoutePoint`
+/// because it is Equatable, which `CLLocationCoordinate2D` is not, so a view can
+/// react to it with `onChange`.
+@MainActor
+final class CurrentLocationProvider: NSObject, ObservableObject {
+    @Published private(set) var point: RoutePoint?
+
+    private let manager = CLLocationManager()
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    /// Asks for a single fix. Requests permission first if the runner has never
+    /// been asked; the app already declares the when-in-use usage string.
+    func request() {
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        default:
+            break
+        }
+    }
+}
+
+extension CurrentLocationProvider: @preconcurrency CLLocationManagerDelegate {
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if manager.authorizationStatus == .authorizedWhenInUse
+            || manager.authorizationStatus == .authorizedAlways {
+            manager.requestLocation()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else { return }
+        point = RoutePoint(location.coordinate)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+}
+
 extension PlannedRoute {
     var lineCoordinates: [CLLocationCoordinate2D] {
         line.map(\.coordinate)
@@ -94,11 +140,12 @@ struct RouteBuilderView: View {
     /// stale. CLLocationCoordinate2D is not Equatable, so the arrays cannot be
     /// compared directly.
     @State private var routingGeneration = 0
+    @StateObject private var location = CurrentLocationProvider()
+    /// Centre on the runner only once. After that they can pan freely without
+    /// the map snapping back every time a new fix arrives.
+    @State private var hasCentredOnUser = false
     @State private var position: MapCameraPosition = .userLocation(
-        fallback: .region(MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 40.0855, longitude: -75.0330),
-            span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-        ))
+        fallback: .automatic
     )
 
     private var distanceMiles: Double {
@@ -135,6 +182,17 @@ struct RouteBuilderView: View {
                     }
                 }
                 .ignoresSafeArea(edges: .bottom)
+                .onAppear { location.request() }
+                .onChange(of: location.point) { _, point in
+                    guard let point, !hasCentredOnUser else { return }
+                    hasCentredOnUser = true
+                    withAnimation {
+                        position = .region(MKCoordinateRegion(
+                            center: point.coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                        ))
+                    }
+                }
 
                 controls
             }
