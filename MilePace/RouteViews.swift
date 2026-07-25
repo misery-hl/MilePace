@@ -627,3 +627,72 @@ struct RunAgainButton: View {
         }
     }
 }
+
+/// Offered after a run the runner has done before but not saved: turn it into a
+/// route. Renders nothing when it does not apply, or when suggestions are off,
+/// so callers can drop it in unconditionally.
+struct RouteSuggestionCard: View {
+    let record: RunRecord
+
+    @EnvironmentObject private var routeStore: RouteStore
+    @EnvironmentObject private var store: RunStore
+    @State private var saved = false
+    @State private var dismissed = false
+
+    private var shouldSuggest: Bool {
+        routeStore.suggestsRoutes
+            && RouteSuggestion.shouldSuggest(
+                for: record,
+                existingRoutes: routeStore.routes,
+                history: store.records
+            )
+    }
+
+    var body: some View {
+        if saved {
+            Label("Saved as a route", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.mint)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
+        } else if shouldSuggest && !dismissed {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "map").foregroundStyle(.mint)
+                    Text("You have run this before")
+                        .font(.headline)
+                }
+                Text("Save it as a route to follow it again, with an off-route alert if you stray.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    routeStore.add(PlannedRoute(fromRun: record))
+                    saved = true
+                } label: {
+                    Label("Save as a route", systemImage: "plus")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(.mint, in: RoundedRectangle(cornerRadius: 16))
+                        .foregroundStyle(.black)
+                }
+
+                HStack {
+                    Button("Not now") { dismissed = true }
+                        .font(.subheadline)
+                    Spacer()
+                    // Turns the whole feature off, so a runner who finds it
+                    // noisy is never asked again.
+                    Button("Don’t suggest routes") { routeStore.suggestsRoutes = false }
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(18)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+        }
+    }
+}

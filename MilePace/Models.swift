@@ -190,6 +190,11 @@ struct RunRecord: Codable, Equatable, Identifiable {
     var hasMeaningfulElevation: Bool {
         elevationGainFeet >= 20
     }
+
+    /// The run's path as route points, for comparing runs to routes.
+    var routePoints: [RoutePoint] {
+        trackPoints.map { RoutePoint(latitude: $0.latitude, longitude: $0.longitude) }
+    }
 }
 
 /// One point on a planned route. Plain `Double`s, so this file stays free of
@@ -343,6 +348,77 @@ enum RouteGeometry {
 
         let t = max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSquared))
         return hypot(px - (ax + t * dx), py - (ay + t * dy))
+    }
+}
+
+/// Decides whether two paths are the same route. Pure and testable.
+///
+/// Two runs are the same route when they are close to the same length and each
+/// stays near the other's line the whole way. Checking both directions matters:
+/// a short there-and-back sits on top of a long loop's line, but the loop does
+/// not sit on the short line, so a one-directional check would call them equal.
+enum RouteSimilarity {
+    /// How far a point may sit from the other line and still count as on it.
+    /// Wide enough for GPS wander and for running the far side of a street.
+    static let toleranceMeters: Double = 50
+    /// Lengths must be within this fraction of each other.
+    static let lengthTolerance: Double = 0.2
+
+    static func isSameRoute(
+        _ a: [RoutePoint],
+        _ b: [RoutePoint],
+        toleranceMeters: Double = toleranceMeters
+    ) -> Bool {
+        guard a.count >= 2, b.count >= 2 else { return false }
+        let lengthA = RouteGeometry.length(of: a)
+        let lengthB = RouteGeometry.length(of: b)
+        guard lengthA > 0, lengthB > 0 else { return false }
+        guard min(lengthA, lengthB) / max(lengthA, lengthB) >= 1 - lengthTolerance else { return false }
+
+        return covers(a, by: b, tolerance: toleranceMeters)
+            && covers(b, by: a, tolerance: toleranceMeters)
+    }
+
+    /// Whether every sampled point of `path` sits within `tolerance` of `other`.
+    private static func covers(_ path: [RoutePoint], by other: [RoutePoint], tolerance: Double) -> Bool {
+        let maxSamples = 40
+        let step = max(1, path.count / maxSamples)
+        var index = 0
+        while index < path.count {
+            guard let distance = RouteGeometry.distanceToLine(from: path[index], line: other),
+                  distance <= tolerance else { return false }
+            index += step
+        }
+        return true
+    }
+}
+
+/// Decides whether to suggest saving a finished run as a route.
+///
+/// The rule is deliberately quiet: suggest only a run the runner has done
+/// before but has not already saved. A route run twice is demonstrably
+/// repeatable, and suppressing one-offs means the runner is not asked to
+/// decline a suggestion after every ordinary run.
+enum RouteSuggestion {
+    static func shouldSuggest(
+        for finished: RunRecord,
+        existingRoutes: [PlannedRoute],
+        history: [RunRecord]
+    ) -> Bool {
+        let path = finished.routePoints
+        guard path.count >= 2 else { return false }
+
+        // Already saved as a route: nothing to suggest.
+        if existingRoutes.contains(where: { RouteSimilarity.isSameRoute(path, $0.line) }) {
+            return false
+        }
+
+        // Suggest only if a different past run took the same route.
+        return history.contains { other in
+            other.id != finished.id
+                && other.routePoints.count >= 2
+                && RouteSimilarity.isSameRoute(path, other.routePoints)
+        }
     }
 }
 

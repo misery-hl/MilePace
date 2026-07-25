@@ -29,6 +29,19 @@ final class RouteStore: ObservableObject {
         routes.filter(\.isArchived)
     }
 
+    /// Whether to offer "save this as a route" after a repeated run. A runner
+    /// who finds it noisy can turn it off from the suggestion itself, and it
+    /// stays off. Defaults to on.
+    var suggestsRoutes: Bool {
+        get { UserDefaults.standard.object(forKey: Self.suggestKey) as? Bool ?? true }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.suggestKey)
+            objectWillChange.send()
+        }
+    }
+
+    private static let suggestKey = "MilePace.suggestsRoutes"
+
     func add(_ route: PlannedRoute) {
         routes.insert(route, at: 0)
         persist()

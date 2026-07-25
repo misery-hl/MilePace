@@ -488,6 +488,41 @@ enum VerifyGoalEngine {
         check(oldRoutes?.first?.isArchived == false, "it decodes as not archived")
         check(oldRoutes?.first?.name == "Old", "and keeps its name")
 
+        // Route similarity, and the twice-run suggestion rule.
+        func routeRun(id: UUID = UUID(), _ points: [RoutePoint], day: Double) -> RunRecord {
+            let start = Date(timeIntervalSince1970: 1_784_000_000 + day * 86_400)
+            return RunRecord(id: id, startedAt: start, endedAt: start.addingTimeInterval(600),
+                             distanceMeters: RouteGeometry.length(of: points), activeDuration: 600,
+                             mileSplits: [],
+                             trackPoints: points.map { TrackPoint(latitude: $0.latitude, longitude: $0.longitude,
+                                 timestamp: start, altitude: nil, horizontalAccuracy: 5, segment: 0) })
+        }
+        // A straight kilometre north, and the same path with slight GPS wander.
+        let pathA = (0...20).map { RoutePoint(latitude: 40.0 + Double($0) * 0.0005, longitude: -75.0) }
+        let pathAWander = (0...20).map { RoutePoint(latitude: 40.0 + Double($0) * 0.0005,
+                                                    longitude: -75.0 + ($0 % 2 == 0 ? 0.0002 : -0.0002)) }
+        // A different path, a kilometre east.
+        let pathB = (0...20).map { RoutePoint(latitude: 40.0, longitude: -75.0 + Double($0) * 0.0006) }
+
+        check(RouteSimilarity.isSameRoute(pathA, pathAWander), "the same path with GPS wander is the same route")
+        check(!RouteSimilarity.isSameRoute(pathA, pathB), "a different path is a different route")
+        check(!RouteSimilarity.isSameRoute(pathA, Array(pathA.prefix(6))), "a much shorter path is not the same route")
+        check(!RouteSimilarity.isSameRoute(pathA, []), "an empty path matches nothing")
+
+        // Suggest only a run done before and not already saved.
+        let firstRun = routeRun(pathA, day: 0)
+        let secondRun = routeRun(pathAWander, day: 3)
+        let otherRun = routeRun(pathB, day: 1)
+        check(!RouteSuggestion.shouldSuggest(for: firstRun, existingRoutes: [], history: [firstRun]),
+              "a first-time run is not suggested")
+        check(RouteSuggestion.shouldSuggest(for: secondRun, existingRoutes: [], history: [firstRun, otherRun, secondRun]),
+              "a run done a second time is suggested")
+        let alreadySaved = PlannedRoute(origin: .pastRun, line: pathA)
+        check(!RouteSuggestion.shouldSuggest(for: secondRun, existingRoutes: [alreadySaved], history: [firstRun, secondRun]),
+              "a run already saved as a route is not suggested again")
+        check(!RouteSuggestion.shouldSuggest(for: routeRun([], day: 5), existingRoutes: [], history: [firstRun]),
+              "a run with no path is never suggested")
+
         // Off-route detection: threshold, dwell, and hysteresis.
         var monitor = OffRouteMonitor()   // off at 40 m, on at 25 m, dwell 8 s
         // On the line: nothing happens.

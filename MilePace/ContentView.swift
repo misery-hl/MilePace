@@ -256,6 +256,7 @@ private struct SavedRunScreen: View {
             ScrollView {
                 VStack(spacing: 20) {
                     GoalApplyView(record: record)
+                    RouteSuggestionCard(record: record)
                     RunAgainButton(record: record)
                     RunDetailView(record: record)
                 }
@@ -512,6 +513,7 @@ private struct RunSummaryView: View {
 
                 if let record {
                     GoalApplyView(record: record)
+                    RouteSuggestionCard(record: record)
                     RunDetailView(record: record, showsDate: false)
                 }
 
