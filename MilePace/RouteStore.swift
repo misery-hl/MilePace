@@ -1,0 +1,72 @@
+import Foundation
+
+/// Local persistence for planned routes, beside the run and goal stores.
+@MainActor
+final class RouteStore: ObservableObject {
+    @Published private(set) var routes: [PlannedRoute] = []
+    @Published var storageError: String?
+
+    private let fileURL: URL
+
+    init(fileURL: URL? = nil) {
+        if let fileURL {
+            self.fileURL = fileURL
+        } else {
+            let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("MilePace", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            self.fileURL = directory.appendingPathComponent("routes.json")
+        }
+        load()
+    }
+
+    func add(_ route: PlannedRoute) {
+        routes.insert(route, at: 0)
+        persist()
+    }
+
+    func rename(_ route: PlannedRoute, to name: String) {
+        guard let index = routes.firstIndex(where: { $0.id == route.id }) else { return }
+        routes[index].name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        persist()
+    }
+
+    func delete(_ route: PlannedRoute) {
+        routes.removeAll { $0.id == route.id }
+        persist()
+    }
+
+    func route(withID id: UUID) -> PlannedRoute? {
+        routes.first { $0.id == id }
+    }
+
+    private func load() {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        guard let data = try? Data(contentsOf: fileURL) else {
+            storageError = "Your saved routes could not be read. The file is still on disk, so nothing was deleted."
+            return
+        }
+        do {
+            routes = try JSONDecoder()
+                .decode([PlannedRoute].self, from: data)
+                .sorted { $0.createdAt > $1.createdAt }
+        } catch {
+            storageError = "Your saved routes could not be read. The file is still on disk, so nothing was deleted."
+        }
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(routes) else {
+            storageError = "This route could not be saved."
+            return
+        }
+        let destination = fileURL
+        Task.detached(priority: .utility) {
+            do {
+                try data.write(to: destination, options: .atomic)
+            } catch {
+                await MainActor.run { self.storageError = "This route could not be written to storage." }
+            }
+        }
+    }
+}

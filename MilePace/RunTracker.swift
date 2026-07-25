@@ -22,6 +22,9 @@ final class RunTracker: NSObject, ObservableObject {
     /// rather than an alert, because a runner should not have to dismiss
     /// something mid-run.
     @Published private(set) var trackingWarning: String?
+    /// A route the runner chose to follow. Shown on the running screen so they
+    /// can see where to go. Cleared when a run finishes.
+    @Published var followedRoute: PlannedRoute?
 
     private let locationManager = CLLocationManager()
     private let store: RunStore
@@ -164,6 +167,7 @@ final class RunTracker: NSObject, ObservableObject {
         store.save(record)
         lastRun = record
         phase = .finished
+        followedRoute = nil
         activityController.end(finalState: activityState())
     }
 

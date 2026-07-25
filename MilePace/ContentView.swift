@@ -86,6 +86,26 @@ private struct StartView: View {
                 }
                 .accessibilityHint("Starts GPS tracking")
 
+                if let route = tracker.followedRoute {
+                    HStack(spacing: 10) {
+                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                            .foregroundStyle(.mint)
+                        Text("Following \(route.displayName)")
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                        Spacer()
+                        Button {
+                            tracker.followedRoute = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .accessibilityLabel("Stop following this route")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                }
+
                 if tracker.usesReducedAccuracy {
                     Label("Precise Location is off, so pace may be less accurate.", systemImage: "location.slash")
                         .font(.footnote)
@@ -93,6 +113,8 @@ private struct StartView: View {
                 }
 
                 GoalsSection()
+
+                RoutesSection()
 
                 CompactMetricPicker()
 
@@ -234,6 +256,7 @@ private struct SavedRunScreen: View {
             ScrollView {
                 VStack(spacing: 20) {
                     GoalApplyView(record: record)
+                    RunAgainButton(record: record)
                     RunDetailView(record: record)
                 }
                 .padding(20)
@@ -383,6 +406,16 @@ private struct RunDashboardView: View {
                 MetricCard(title: "DISTANCE", value: String(format: "%.2f", tracker.distanceMiles), unit: "mi")
                 MetricCard(title: "TIME", value: tracker.elapsed.clockText, unit: "active")
                 MetricCard(title: "LIVE PACE", value: tracker.rollingPace?.paceText ?? "--:--", unit: "/mi")
+            }
+
+            if let route = tracker.followedRoute {
+                FollowedRouteMap(route: route)
+                    .frame(height: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                    }
             }
 
             if let warning = tracker.trackingWarning {
