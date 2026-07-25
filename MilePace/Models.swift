@@ -346,6 +346,76 @@ enum RouteGeometry {
     }
 }
 
+/// Decides when a runner has strayed off a followed route, and when they are
+/// back on it. Pure, so it is testable without Core Location.
+///
+/// Two thresholds, not one. A runner crosses the wider distance to be called
+/// off-route, and must come back inside the tighter one to be called on-route
+/// again. That gap is hysteresis: it stops the alert flapping on and off while
+/// the runner hovers near the edge, which GPS noise alone would cause. The
+/// off-route call also waits out a dwell, so a single stray fix or a wide bend
+/// in the road does not fire it.
+struct OffRouteMonitor {
+    /// Past this distance from the route line, the runner is straying.
+    var offThresholdMeters: Double = 40
+    /// The runner is back on route once inside this tighter distance.
+    var onThresholdMeters: Double = 25
+    /// How long the runner must be beyond the off threshold before the alert
+    /// fires. Long enough to ride out one bad fix or a brief detour.
+    var dwellSeconds: TimeInterval = 8
+
+    private(set) var isOffRoute = false
+    /// When the current stray began, in run-elapsed seconds. Nil when on route.
+    private var strayingSince: TimeInterval?
+
+    enum Event: Equatable {
+        case wentOffRoute
+        case returnedToRoute
+    }
+
+    /// Feeds one position in. `distanceFromLine` is the shortest distance to the
+    /// route; `accuracy` is the fix's horizontal accuracy, which widens the off
+    /// threshold so a noisy fix does not fire a false alert. Returns an event
+    /// only when the state actually changes.
+    mutating func update(
+        distanceFromLine: Double,
+        accuracy: Double,
+        elapsed: TimeInterval
+    ) -> Event? {
+        // A poor fix should not be trusted to say the runner strayed, so give
+        // the off threshold the benefit of the fix's own uncertainty.
+        let offLimit = offThresholdMeters + max(0, accuracy)
+
+        if isOffRoute {
+            if distanceFromLine <= onThresholdMeters {
+                isOffRoute = false
+                strayingSince = nil
+                return .returnedToRoute
+            }
+            return nil
+        }
+
+        if distanceFromLine > offLimit {
+            let since = strayingSince ?? elapsed
+            strayingSince = since
+            if elapsed - since >= dwellSeconds {
+                isOffRoute = true
+                return .wentOffRoute
+            }
+        } else {
+            // Back inside the line before the dwell elapsed; cancel the stray.
+            strayingSince = nil
+        }
+        return nil
+    }
+
+    /// Clears the state, for the start of a run or a resume.
+    mutating func reset() {
+        isOffRoute = false
+        strayingSince = nil
+    }
+}
+
 /// What kind of effort a goal describes.
 ///
 /// A run and a sprint are stated in different units, and only one of them has a

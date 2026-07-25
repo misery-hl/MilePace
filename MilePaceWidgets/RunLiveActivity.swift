@@ -29,7 +29,11 @@ struct RunLiveActivity: Widget {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        if let goalDelta = context.state.goalDeltaText {
+                        if context.state.isOffRoute {
+                            Label("Off route", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.orange)
+                        } else if let goalDelta = context.state.goalDeltaText {
                             Text(goalDelta)
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(
@@ -43,8 +47,9 @@ struct RunLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                Image(systemName: context.state.isPaused ? "pause.fill" : "figure.run")
-                    .foregroundStyle(context.state.isPaused ? .orange : .mint)
+                Image(systemName: context.state.isOffRoute ? "exclamationmark.triangle.fill"
+                      : (context.state.isPaused ? "pause.fill" : "figure.run"))
+                    .foregroundStyle(context.state.isOffRoute || context.state.isPaused ? .orange : .mint)
             } compactTrailing: {
                 // One figure only: this is a few characters wide. Which figure
                 // is the runner's choice.

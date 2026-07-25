@@ -488,6 +488,49 @@ enum VerifyGoalEngine {
         check(oldRoutes?.first?.isArchived == false, "it decodes as not archived")
         check(oldRoutes?.first?.name == "Old", "and keeps its name")
 
+        // Off-route detection: threshold, dwell, and hysteresis.
+        var monitor = OffRouteMonitor()   // off at 40 m, on at 25 m, dwell 8 s
+        // On the line: nothing happens.
+        check(monitor.update(distanceFromLine: 5, accuracy: 5, elapsed: 0) == nil,
+              "a runner on the route triggers nothing")
+        // Straying starts the dwell but does not fire immediately.
+        check(monitor.update(distanceFromLine: 60, accuracy: 5, elapsed: 10) == nil,
+              "crossing the threshold does not fire at once")
+        check(monitor.isOffRoute == false, "still on route during the dwell")
+        // Still straying, but not long enough.
+        check(monitor.update(distanceFromLine: 60, accuracy: 5, elapsed: 15) == nil,
+              "still within the dwell, still quiet")
+        // Past the dwell: fires.
+        check(monitor.update(distanceFromLine: 60, accuracy: 5, elapsed: 19) == .wentOffRoute,
+              "straying past the dwell fires off-route")
+        check(monitor.isOffRoute, "now off route")
+        // A little closer, but not inside the on threshold: stays off.
+        check(monitor.update(distanceFromLine: 30, accuracy: 5, elapsed: 22) == nil,
+              "between the thresholds the alert holds, so it does not flap")
+        check(monitor.isOffRoute, "still off route in the hysteresis band")
+        // Back inside the tighter on threshold: returns.
+        check(monitor.update(distanceFromLine: 20, accuracy: 5, elapsed: 25) == .returnedToRoute,
+              "coming back inside the on threshold clears it")
+        check(monitor.isOffRoute == false, "back on route")
+
+        // A single stray fix, then back, never fires.
+        var flicker = OffRouteMonitor()
+        check(flicker.update(distanceFromLine: 80, accuracy: 5, elapsed: 0) == nil, "one stray fix")
+        check(flicker.update(distanceFromLine: 5, accuracy: 5, elapsed: 2) == nil, "then back on route")
+        check(flicker.update(distanceFromLine: 5, accuracy: 5, elapsed: 12) == nil, "no delayed false alarm")
+        check(flicker.isOffRoute == false, "a brief stray never fires")
+
+        // A poor fix widens the threshold, so noise alone does not fire.
+        var noisy = OffRouteMonitor()
+        check(noisy.update(distanceFromLine: 55, accuracy: 30, elapsed: 0) == nil, "a 55 m stray with a 30 m fix")
+        check(noisy.update(distanceFromLine: 55, accuracy: 30, elapsed: 20) == nil,
+              "stays quiet, because 40 + 30 accuracy is not exceeded")
+        check(noisy.isOffRoute == false, "an inaccurate fix does not raise a false alarm")
+
+        // Reset clears everything.
+        monitor.reset()
+        check(monitor.isOffRoute == false, "reset clears the off-route state")
+
         // Only the absurd is rejected. Checked as a speed so one rule covers
         // a 40 yard dash and a marathon.
         check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).isPlausible,
