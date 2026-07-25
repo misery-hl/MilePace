@@ -425,6 +425,69 @@ enum VerifyGoalEngine {
         check(preArchive?.count == 1, "a run saved before archiving still decodes")
         check(preArchive?.first?.isArchived == false, "it decodes as not archived")
 
+        // Route geometry: distance, and how far a point strays from the line.
+        // Two points ~111 m apart in latitude (0.001 deg).
+        let a = RoutePoint(latitude: 40.000, longitude: -75.000)
+        let b = RoutePoint(latitude: 40.001, longitude: -75.000)
+        check(nearly(RouteGeometry.distance(a, b), 111.2, tolerance: 1), "haversine measures a short leg")
+        let square = [
+            RoutePoint(latitude: 40.000, longitude: -75.000),
+            RoutePoint(latitude: 40.001, longitude: -75.000),
+            RoutePoint(latitude: 40.001, longitude: -74.999)
+        ]
+        check(nearly(RouteGeometry.length(of: square), 111.2 + 85.3, tolerance: 3), "length sums the legs")
+        check(RouteGeometry.length(of: []) == 0, "an empty line has no length")
+        check(RouteGeometry.length(of: [a]) == 0, "a single point has no length")
+
+        // A point on the line is zero from it; a point beside it is its offset.
+        let onLine = RoutePoint(latitude: 40.0005, longitude: -75.000)
+        check((RouteGeometry.distanceToLine(from: onLine, line: [a, b]) ?? 99) < 1,
+              "a point on the line is on the line")
+        let beside = RoutePoint(latitude: 40.0005, longitude: -74.9993)
+        let offset = RouteGeometry.distanceToLine(from: beside, line: [a, b]) ?? 0
+        check(nearly(offset, 60, tolerance: 8), "a point beside the line reports how far off it is")
+
+        // Straying past the end of a segment measures to the endpoint, not the
+        // infinite line, so a runner past the finish is not called on-route.
+        let pastEnd = RoutePoint(latitude: 40.002, longitude: -75.000)
+        check(nearly(RouteGeometry.distanceToLine(from: pastEnd, line: [a, b]) ?? 0, 111.2, tolerance: 2),
+              "distance clamps to the segment ends")
+
+        // A route from a run takes the run's path as its line.
+        let runWithRoute = RunRecord(
+            id: UUID(), startedAt: Date(), endedAt: Date(),
+            distanceMeters: 1_000, activeDuration: 300, mileSplits: [],
+            trackPoints: [
+                TrackPoint(latitude: 40.0, longitude: -75.0, timestamp: Date(), altitude: nil, horizontalAccuracy: 5, segment: 0),
+                TrackPoint(latitude: 40.001, longitude: -75.0, timestamp: Date(), altitude: nil, horizontalAccuracy: 5, segment: 0)
+            ])
+        let fromRun = PlannedRoute(fromRun: runWithRoute)
+        check(fromRun.line.count == 2, "a route from a run takes its path")
+        check(fromRun.origin == .pastRun, "and is marked as coming from a run")
+        check(nearly(fromRun.distanceMeters, 111.2, tolerance: 1), "and measures the run's path")
+
+        // A saved route round-trips through JSON.
+        let drawn = PlannedRoute(name: "Loop", origin: .drawn,
+                                 waypoints: square, line: square)
+        let roundTripped = (try? JSONEncoder().encode(drawn))
+            .flatMap { try? JSONDecoder().decode(PlannedRoute.self, from: $0) }
+        check(roundTripped == drawn, "a route round-trips through JSON")
+        check(roundTripped?.displayName == "Loop", "a named route shows its name")
+        let unnamedRoute = PlannedRoute(origin: .drawn, line: square)
+        check(unnamedRoute.displayName.contains("mi route"), "an unnamed route shows its distance")
+
+        // Archiving a route keeps it. Routes saved before archiving decode as
+        // not archived, so an old routes.json keeps loading.
+        check(drawn.isArchived == false, "a new route is not archived")
+        let archivedRouteJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-00000000000F","createdAt":770000000,"name":"Old",
+        "origin":"drawn","waypoints":[],"line":[{"latitude":40.0,"longitude":-75.0},{"latitude":40.001,"longitude":-75.0}]}]
+        """
+        let oldRoutes = try? JSONDecoder().decode([PlannedRoute].self, from: Data(archivedRouteJSON.utf8))
+        check(oldRoutes?.count == 1, "a route saved before archiving still decodes")
+        check(oldRoutes?.first?.isArchived == false, "it decodes as not archived")
+        check(oldRoutes?.first?.name == "Old", "and keeps its name")
+
         // Only the absurd is rejected. Checked as a speed so one rule covers
         // a 40 yard dash and a marathon.
         check(RunGoal(distanceMeters: twoMiles, targetDuration: 720).isPlausible,

@@ -192,6 +192,160 @@ struct RunRecord: Codable, Equatable, Identifiable {
     }
 }
 
+/// One point on a planned route. Plain `Double`s, so this file stays free of
+/// Core Location and MapKit and the pace checks keep compiling it.
+struct RoutePoint: Codable, Equatable {
+    let latitude: Double
+    let longitude: Double
+}
+
+/// A route the runner intends to run, drawn on a map or taken from a past run.
+///
+/// The line is the full drawn or recorded path, dense enough to draw and to
+/// measure distance from. Waypoints are only the corners the runner placed, so
+/// a custom route can be reopened and edited without re-deriving them.
+struct PlannedRoute: Codable, Equatable, Identifiable {
+    enum Origin: String, Codable {
+        case drawn      // built on the map
+        case pastRun    // taken from a recorded run
+    }
+
+    let id: UUID
+    let createdAt: Date
+    var name: String
+    let origin: Origin
+    /// The corners the runner placed. Empty for a route taken from a past run.
+    let waypoints: [RoutePoint]
+    /// The full path to draw and follow.
+    let line: [RoutePoint]
+    /// Hidden from the list but kept, the same as an archived run.
+    var isArchived: Bool
+
+    init(
+        id: UUID = UUID(),
+        createdAt: Date = Date(),
+        name: String = "",
+        origin: Origin,
+        waypoints: [RoutePoint] = [],
+        line: [RoutePoint],
+        isArchived: Bool = false
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.name = name
+        self.origin = origin
+        self.waypoints = waypoints
+        self.line = line
+        self.isArchived = isArchived
+    }
+
+    /// Decodes `isArchived` leniently, so routes saved before archiving keep
+    /// loading instead of failing the whole file.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        name = try container.decode(String.self, forKey: .name)
+        origin = try container.decode(Origin.self, forKey: .origin)
+        waypoints = try container.decode([RoutePoint].self, forKey: .waypoints)
+        line = try container.decode([RoutePoint].self, forKey: .line)
+        isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+    }
+
+    var distanceMeters: Double {
+        RouteGeometry.length(of: line)
+    }
+
+    var distanceMiles: Double {
+        distanceMeters / metersPerMile
+    }
+
+    var displayName: String {
+        name.isEmpty ? String(format: "%.2f mi route", distanceMiles) : name
+    }
+
+    var bounds: RouteBounds? {
+        RouteGeometry.bounds(of: line)
+    }
+
+    /// Builds a route from a recorded run, so a runner can run it again. The
+    /// run's own path becomes the line to follow; it has no placed corners.
+    init(fromRun record: RunRecord) {
+        self.init(
+            name: "",
+            origin: .pastRun,
+            waypoints: [],
+            line: record.trackPoints.map { RoutePoint(latitude: $0.latitude, longitude: $0.longitude) }
+        )
+    }
+}
+
+/// Pure geometry over a route's points. No Core Location, so it is testable and
+/// keeps `Models.swift` framework-free.
+enum RouteGeometry {
+    static let earthRadiusMeters = 6_371_000.0
+
+    /// Great-circle distance between two points, in metres. The haversine
+    /// formula, so it stays accurate over the short legs a route is made of.
+    static func distance(_ a: RoutePoint, _ b: RoutePoint) -> Double {
+        let lat1 = a.latitude * .pi / 180
+        let lat2 = b.latitude * .pi / 180
+        let dLat = (b.latitude - a.latitude) * .pi / 180
+        let dLon = (b.longitude - a.longitude) * .pi / 180
+        let h = sin(dLat / 2) * sin(dLat / 2)
+            + cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+        return 2 * earthRadiusMeters * asin(min(1, sqrt(h)))
+    }
+
+    static func length(of line: [RoutePoint]) -> Double {
+        guard line.count >= 2 else { return 0 }
+        return zip(line, line.dropFirst()).reduce(0) { $0 + distance($1.0, $1.1) }
+    }
+
+    static func bounds(of line: [RoutePoint]) -> RouteBounds? {
+        let lats = line.map(\.latitude)
+        let lons = line.map(\.longitude)
+        guard let minLat = lats.min(), let maxLat = lats.max(),
+              let minLon = lons.min(), let maxLon = lons.max() else { return nil }
+        return RouteBounds(minLatitude: minLat, maxLatitude: maxLat,
+                           minLongitude: minLon, maxLongitude: maxLon)
+    }
+
+    /// The shortest distance from a point to the route line, in metres. This is
+    /// what off-route detection measures: how far the runner has strayed from
+    /// the nearest part of the planned path.
+    static func distanceToLine(from point: RoutePoint, line: [RoutePoint]) -> Double? {
+        guard let first = line.first else { return nil }
+        guard line.count >= 2 else { return distance(point, first) }
+
+        var nearest = Double.greatestFiniteMagnitude
+        for (a, b) in zip(line, line.dropFirst()) {
+            nearest = min(nearest, distanceToSegment(point, a, b))
+        }
+        return nearest
+    }
+
+    /// Distance from a point to a segment, worked in a local flat projection.
+    /// Over the tens of metres a route leg spans, treating latitude and
+    /// longitude as a plane is accurate to well under the threshold that
+    /// off-route detection cares about, and avoids a costly exact solution.
+    private static func distanceToSegment(_ p: RoutePoint, _ a: RoutePoint, _ b: RoutePoint) -> Double {
+        let latScale = 111_320.0
+        let lonScale = 111_320.0 * cos(a.latitude * .pi / 180)
+
+        let px = p.longitude * lonScale, py = p.latitude * latScale
+        let ax = a.longitude * lonScale, ay = a.latitude * latScale
+        let bx = b.longitude * lonScale, by = b.latitude * latScale
+
+        let dx = bx - ax, dy = by - ay
+        let lengthSquared = dx * dx + dy * dy
+        guard lengthSquared > 0 else { return hypot(px - ax, py - ay) }
+
+        let t = max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSquared))
+        return hypot(px - (ax + t * dx), py - (ay + t * dy))
+    }
+}
+
 /// What kind of effort a goal describes.
 ///
 /// A run and a sprint are stated in different units, and only one of them has a

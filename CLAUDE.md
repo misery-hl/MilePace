@@ -96,6 +96,20 @@ The user wants proper source control, not direct commits to `main`:
 
 **Verify on device before merging anything visual or GPS-dependent.** This was learned the hard way: the social share card was merged after a clean build, and the very first tap on a physical iPhone revealed the share sheet had no apps in it. The build passing means the code compiles, not that the feature works. Xcode builds from the working tree, so the user can always test a fix before it is merged — offer that instead of merging first.
 
+## How the project is organised
+
+The app is one big `ContentView.swift` holding most screens as `private struct`s, plus a few topic files. When adding a screen, check whether it belongs in `ContentView.swift` or its own file. `RouteViews.swift` is the precedent for splitting UI out: it keeps `ContentView.swift` from growing until the Swift type-checker times out, which has happened twice (the fix is to break a large `body` into smaller computed properties or subviews).
+
+The data and logic layers are deliberately split from the UI so they can be checked without a simulator:
+
+- `Models.swift`, `RunAccumulator.swift`, `PacePrediction.swift` are **framework-free** (no Core Location, MapKit, SwiftUI). They compile with bare `swiftc`, which is how `Tools/VerifyPaceEngine.swift` and `Tools/VerifyGoalEngine.swift` test them. Keep coordinate/MapKit conversions in the view files (`RouteViews.swift` has the `RoutePoint` ↔ `CLLocationCoordinate2D` bridge), not in `Models.swift`.
+- Every store (`RunStore`, `GoalStore`, `RouteStore`) follows the same shape: `@MainActor`, `@Published` array, JSON in Application Support, lenient decoding with `decodeIfPresent` so old files keep loading, and a `@Published storageError` surfaced as an alert.
+- `RunTracker` owns the live run and publishes everything the UI reads. It also drives the Live Activity and holds `followedRoute` and `goalContext` as inputs the view layer sets.
+
+**Backwards compatibility is a standing rule.** Every model has a custom `init(from:)` that defaults new fields, because the run and goal histories are local-first with no backup. Any new `Codable` field needs a check proving an old file still decodes; the pattern is all through `Tools/VerifyGoalEngine.swift`.
+
+**The check tools are the test suite.** There is no XCTest run in this workflow. `VerifyGoalEngine.swift` is now the main one (177 checks) and covers goals, prediction, formatting, elevation, archiving, and route geometry. Add to it when adding logic. The count is asserted in the final `print`, so a stale binary from a failed compile is easy to spot — the number does not move.
+
 ## Implemented functionality
 
 - Start, pause, resume, and finish a run.
@@ -114,6 +128,7 @@ The user wants proper source control, not direct commits to `main`:
 - **Goals: several at once. A goal is a run (miles or kilometres, entered as a total time or a pace per mile) or a sprint (metres or yards up to about a mile, entered as a total time only). Add, edit, and delete them, with a confirmation that states what is lost. A live projected finish for the goal being followed, and a summary comparing each added run with the target, the previous run, and the best run.**
 - **Elevation gain and loss per run, filtered so GPS altitude noise does not invent climb.**
 - **A Live Activity on the Lock Screen and in the Dynamic Island while a run is active.**
+- **Routes: build a custom route by tapping corners on a map (MapKit walking directions fill the path), or turn a past run into a route. Follow one to see it on the running screen. `RouteGeometry.distanceToLine` is the primitive for off-route detection, which is not built yet.**
 - Post-run social share card and native iOS share sheet.
 - Privacy manifest declaring no tracking or collected/transmitted data.
 - 1024x1024 opaque app icon and an icon-generation utility.
@@ -137,6 +152,10 @@ The user wants proper source control, not direct commits to `main`:
   - Local JSON persistence.
 - `MilePace/GoalStore.swift`
   - Local JSON persistence for goals, in `goals.json`.
+- `MilePace/RouteStore.swift`
+  - Local JSON persistence for planned routes, in `routes.json`.
+- `MilePace/RouteViews.swift`
+  - All route UI: the map builder, the routes list, route detail, and the followed-route map. Also `RouteDirections`, which calls MapKit `MKDirections` for on-device walking paths — no key, no backend. App-only, excluded from `MilePaceCore`.
 - `MilePaceTests/RunAccumulatorTests.swift`
   - XCTest coverage for pace and split calculations.
 - `Tools/VerifyPaceEngine.swift`
@@ -255,7 +274,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 164 goal-engine checks
+Passed 177 goal-engine checks
 ```
 
 Also run:

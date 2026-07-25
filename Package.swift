@@ -20,6 +20,8 @@ let package = Package(
                 "Info.plist",
                 "MilePaceApp.swift",
                 "PrivacyInfo.xcprivacy",
+                "RouteStore.swift",
+                "RouteViews.swift",
                 "RunStore.swift",
                 "RunTracker.swift"
             ],
