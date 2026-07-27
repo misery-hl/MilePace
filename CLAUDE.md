@@ -128,7 +128,7 @@ The data and logic layers are deliberately split from the UI so they can be chec
 - **Goals: several at once. A goal is a run (miles or kilometres, entered as a total time or a pace per mile) or a sprint (metres or yards up to about a mile, entered as a total time only). Add, edit, and delete them, with a confirmation that states what is lost. A live projected finish for the goal being followed, and a summary comparing each added run with the target, the previous run, and the best run.**
 - **Elevation gain and loss per run, filtered so GPS altitude noise does not invent climb.**
 - **A Live Activity on the Lock Screen and in the Dynamic Island while a run is active.**
-- **Routes: build a custom route by tapping corners on a map (MapKit walking directions fill the path), or turn a past run into a route. Follow one to see it on the running screen. Follow one to see it on the running screen, with an off-route alert when you stray.**
+- **Routes: build a custom route by tapping corners on a map (MapKit walking directions fill the path), or turn a past run into a route. Follow one to see it on the running screen. Follow one to see it on the running screen, with an off-route alert when you stray. After a run the app has seen you do before, it offers to save it as a route, unless the runner turns suggestions off.**
 - Post-run social share card and native iOS share sheet.
 - Privacy manifest declaring no tracking or collected/transmitted data.
 - 1024x1024 opaque app icon and an icon-generation utility.
@@ -276,7 +276,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 199 goal-engine checks
+Passed 207 goal-engine checks
 ```
 
 Also run:
