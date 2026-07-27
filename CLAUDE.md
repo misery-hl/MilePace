@@ -129,7 +129,7 @@ The data and logic layers are deliberately split from the UI so they can be chec
 - **Elevation gain and loss per run, filtered so GPS altitude noise does not invent climb.**
 - **A Live Activity on the Lock Screen and in the Dynamic Island while a run is active.**
 - **Routes: build a custom route by tapping corners on a map (MapKit walking directions fill the path), or turn a past run into a route. Follow one to see it on the running screen. Follow one to see it on the running screen, with an off-route alert when you stray, and a route map with your live dot on the Lock Screen. After a run the app has seen you do before, it offers to save it as a route, unless the runner turns suggestions off.**
-- Post-run social share card and native iOS share sheet.
+- Post-run social share card, now with the route map, plus a transparent overlay style, and the native iOS share sheet.
 - Privacy manifest declaring no tracking or collected/transmitted data.
 - 1024x1024 opaque app icon and an icon-generation utility.
 

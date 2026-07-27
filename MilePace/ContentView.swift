@@ -1469,21 +1469,33 @@ private struct RunShareButton: View {
 
     @State private var shareItem: ShareItem?
     @State private var renderFailed = false
+    @State private var isChoosingStyle = false
+    @State private var isRendering = false
 
     var body: some View {
         Button {
-            shareRun()
+            isChoosingStyle = true
         } label: {
-            Label("Share Run", systemImage: "square.and.arrow.up")
+            Label(isRendering ? "Preparing…" : "Share Run", systemImage: "square.and.arrow.up")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
                 .background(.white, in: RoundedRectangle(cornerRadius: 18))
                 .foregroundStyle(.black)
         }
+        .disabled(isRendering)
         .accessibilityHint("Creates a MilePace summary image and opens the iOS share sheet")
+        .confirmationDialog("Share this run", isPresented: $isChoosingStyle, titleVisibility: .visible) {
+            Button("Card with map") { render(style: .card) }
+            // The transparent style is only useful when the runner will put it
+            // over their own photo, so it is offered plainly, not defaulted.
+            Button("Transparent overlay") { render(style: .transparent) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A branded card with your route map, or a transparent overlay for your own photo.")
+        }
         .sheet(item: $shareItem) { item in
-            ActivityView(activityItems: [item.image, item.caption])
+            ActivityView(activityItems: item.activityItems)
         }
         .alert("Couldn’t create share image", isPresented: $renderFailed) {
             Button("OK", role: .cancel) {}
@@ -1492,25 +1504,41 @@ private struct RunShareButton: View {
         }
     }
 
-    @MainActor
-    private func shareRun() {
-        let card = RunShareCard(record: record)
-            .frame(width: 1_080, height: 1_350)
+    private enum ShareStyle { case card, transparent }
 
-        let renderer = ImageRenderer(content: card)
-        renderer.scale = 1
-        renderer.isOpaque = true
+    private func render(style: ShareStyle) {
+        isRendering = true
+        Task { @MainActor in
+            // The map is drawn with MKMapSnapshotter, which is async, so the
+            // whole render is async. The card embeds the finished map image.
+            let mapImage: UIImage? = style == .card && record.hasRoute
+                ? await RouteSnapshotter.snapshot(route: record.routePoints,
+                                                  size: CGSize(width: 1_016, height: 520))
+                : nil
 
-        guard let image = renderer.uiImage else {
-            renderFailed = true
-            return
+            let content: any View = style == .card
+                ? RunShareCard(record: record, mapImage: mapImage).frame(width: 1_080, height: 1_350)
+                : RunShareCardTransparent(record: record).frame(width: 1_080, height: 1_350)
+
+            let renderer = ImageRenderer(content: AnyView(content))
+            renderer.scale = 1
+            // Opaque for the card, so it is a solid image; not for the overlay,
+            // so the background stays clear for placing over a photo.
+            renderer.isOpaque = style == .card
+
+            isRendering = false
+            guard let image = renderer.uiImage else {
+                renderFailed = true
+                return
+            }
+            shareItem = ShareItem(image: image, caption: caption, includeCaption: style == .card)
         }
+    }
 
+    private var caption: String {
         let distance = String(format: "%.2f", record.distanceMiles)
         let pace = record.averagePace?.paceText ?? "--:--"
-        let caption = "I ran \(distance) miles in \(record.activeDuration.clockText) at \(pace)/mi with MilePace — a free, open-source running app. https://github.com/misery-hl/MilePace"
-
-        shareItem = ShareItem(image: image, caption: caption)
+        return "I ran \(distance) miles in \(record.activeDuration.clockText) at \(pace)/mi with MilePace — a free, open-source running app. https://github.com/misery-hl/MilePace"
     }
 }
 
@@ -1518,10 +1546,18 @@ private struct ShareItem: Identifiable {
     let id = UUID()
     let image: UIImage
     let caption: String
+    var includeCaption = true
+
+    /// The transparent overlay is for the runner's own post, so it is shared as
+    /// the image alone; a caption would fight whatever they write themselves.
+    var activityItems: [Any] {
+        includeCaption ? [image, caption] : [image]
+    }
 }
 
 private struct RunShareCard: View {
     let record: RunRecord
+    var mapImage: UIImage?
 
     private var completedMilesText: String {
         let count = record.mileSplits.count
@@ -1562,10 +1598,24 @@ private struct RunShareCard: View {
                     }
                 }
 
+                if let mapImage {
+                    Image(uiImage: mapImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 460)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 32))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 32)
+                                .strokeBorder(.white.opacity(0.15), lineWidth: 2)
+                        }
+                        .padding(.top, 44)
+                }
+
                 Spacer()
 
                 Text(String(format: "%.2f", record.distanceMiles))
-                    .font(.system(size: 224, weight: .bold, design: .rounded))
+                    .font(.system(size: mapImage == nil ? 224 : 168, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .minimumScaleFactor(0.75)
                     .lineLimit(1)
@@ -1619,6 +1669,64 @@ private struct RunShareCard: View {
             .padding(82)
         }
         .clipped()
+    }
+}
+
+/// A transparent share image: the run's numbers with no background, so the
+/// runner can drop it over their own photo. Every element carries a shadow, so
+/// it stays legible on a light or a busy picture.
+private struct RunShareCardTransparent: View {
+    let record: RunRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 20) {
+                Image(systemName: "figure.run")
+                    .font(.system(size: 48, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 92, height: 92)
+                    .background(.mint, in: Circle())
+                Text("MilePace")
+                    .font(.system(size: 54, weight: .bold, design: .rounded))
+            }
+
+            Spacer()
+
+            Text(String(format: "%.2f", record.distanceMiles))
+                .font(.system(size: 232, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .minimumScaleFactor(0.75)
+                .lineLimit(1)
+            Text("MILES")
+                .font(.system(size: 44, weight: .bold))
+                .tracking(10)
+
+            HStack(spacing: 56) {
+                transparentMetric("TIME", record.activeDuration.clockText)
+                transparentMetric("PACE", (record.averagePace?.paceText ?? "--:--") + "/mi")
+            }
+            .padding(.top, 44)
+
+            Spacer()
+        }
+        .foregroundStyle(.white)
+        .shadow(color: .black.opacity(0.55), radius: 12, x: 0, y: 4)
+        .padding(90)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func transparentMetric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 26, weight: .bold))
+                .tracking(2)
+                .opacity(0.85)
+            Text(value)
+                .font(.system(size: 68, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
     }
 }
 

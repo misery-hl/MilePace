@@ -696,3 +696,57 @@ struct RouteSuggestionCard: View {
         }
     }
 }
+
+/// Renders a run's route as a flat image for the share card. `ImageRenderer`
+/// cannot capture a live `Map`'s tiles, so the map is rendered with
+/// `MKMapSnapshotter` and the route line is drawn on top with Core Graphics.
+enum RouteSnapshotter {
+    @MainActor
+    static func snapshot(route: [RoutePoint], size: CGSize) async -> UIImage? {
+        guard route.count >= 2, let bounds = RouteGeometry.bounds(of: route) else { return nil }
+
+        let options = MKMapSnapshotter.Options()
+        options.region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: bounds.centerLatitude, longitude: bounds.centerLongitude),
+            span: MKCoordinateSpan(
+                latitudeDelta: max(bounds.latitudeSpan * 1.4, 0.003),
+                longitudeDelta: max(bounds.longitudeSpan * 1.4, 0.003)
+            )
+        )
+        options.size = size
+        options.mapType = .standard
+        options.pointOfInterestFilter = .excludingAll
+        // A dark map, to match the app and the branded card.
+        options.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
+
+        guard let snapshot = try? await MKMapSnapshotter(options: options).start() else { return nil }
+
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { context in
+            snapshot.image.draw(at: .zero)
+            let cg = context.cgContext
+            cg.setLineWidth(10)
+            cg.setLineCap(.round)
+            cg.setLineJoin(.round)
+            cg.setStrokeColor(UIColor.systemMint.cgColor)
+
+            for (index, point) in route.enumerated() {
+                let pixel = snapshot.point(for: point.coordinate)
+                if index == 0 { cg.move(to: pixel) } else { cg.addLine(to: pixel) }
+            }
+            cg.strokePath()
+
+            // Start and finish dots.
+            func dot(_ point: RoutePoint, fill: UIColor) {
+                let p = snapshot.point(for: point.coordinate)
+                let rect = CGRect(x: p.x - 11, y: p.y - 11, width: 22, height: 22)
+                cg.setFillColor(UIColor.black.cgColor)
+                cg.fillEllipse(in: rect.insetBy(dx: -3, dy: -3))
+                cg.setFillColor(fill.cgColor)
+                cg.fillEllipse(in: rect)
+            }
+            if let first = route.first { dot(first, fill: .systemMint) }
+            if let last = route.last { dot(last, fill: .white) }
+        }
+    }
+}
