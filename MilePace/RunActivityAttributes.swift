@@ -36,6 +36,12 @@ struct RunActivityAttributes: ActivityAttributes {
         /// Set when a goal is being followed. Positive is behind the target.
         var goalName: String?
         var goalDeltaSeconds: Double?
+        /// The runner's current position, so the Lock Screen map can draw the
+        /// dot on the route. Set only when a route is being followed.
+        var userPoint: RoutePoint?
+        /// How far the runner is from the route line, in metres. Shown instead
+        /// of a turn instruction, so a glance says how far off, not what to do.
+        var offRouteDistanceMeters: Double?
 
         var distanceMiles: Double {
             distanceMeters / metersPerMile
@@ -90,7 +96,18 @@ struct RunActivityAttributes: ActivityAttributes {
                 : String(format: "%d:%02d", seconds / 60, seconds % 60)
             return goalDeltaSeconds <= 0 ? "\(value) ahead" : "\(value) behind"
         }
+
+        /// "45 m off route", shown on the Lock Screen and Island so the runner
+        /// knows how far they have strayed without a turn instruction.
+        var offRouteText: String? {
+            guard isOffRoute, let offRouteDistanceMeters else { return nil }
+            return String(format: "%.0f m off route", offRouteDistanceMeters)
+        }
     }
+
+    /// The route being followed, downsampled to draw on the small Lock Screen
+    /// map. Empty when no route is followed. Fixed for the life of the activity.
+    var routeLine: [RoutePoint] = []
 
     /// Fixed for the life of the activity. The start time lets the widget label
     /// the run without another update.
