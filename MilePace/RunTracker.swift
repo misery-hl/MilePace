@@ -25,6 +25,10 @@ final class RunTracker: NSObject, ObservableObject {
     /// A route the runner chose to follow. Shown on the running screen so they
     /// can see where to go. Cleared when a run finishes.
     @Published var followedRoute: PlannedRoute?
+    /// True while the runner has strayed from the followed route.
+    @Published private(set) var isOffRoute = false
+
+    private var offRouteMonitor = OffRouteMonitor()
 
     private let locationManager = CLLocationManager()
     private let store: RunStore
@@ -133,6 +137,8 @@ final class RunTracker: NSObject, ObservableObject {
         previousLocation = nil
         previousLocationElapsed = nil
         accumulator.resetRollingWindow(at: accumulatedActiveDuration)
+        offRouteMonitor.reset()
+        isOffRoute = false
         startLocationUpdates()
         startTimer()
         UIApplication.shared.isIdleTimerDisabled = true
@@ -168,6 +174,8 @@ final class RunTracker: NSObject, ObservableObject {
         lastRun = record
         phase = .finished
         followedRoute = nil
+        isOffRoute = false
+        RunNotifications.clearOffRoute()
         activityController.end(finalState: activityState())
     }
 
@@ -223,6 +231,7 @@ final class RunTracker: NSObject, ObservableObject {
             elapsed: elapsed,
             elevationGainMeters: accumulator.elevationGainMeters,
             isPaused: phase == .paused,
+            isOffRoute: isOffRoute,
             compactMetric: activityController.compactMetric,
             goalName: goalName,
             goalDeltaSeconds: goalDelta
@@ -243,6 +252,13 @@ final class RunTracker: NSObject, ObservableObject {
         lastAcceptedFixAt = nil
         lastRejectionReason = nil
         trackingWarning = nil
+        isOffRoute = false
+        offRouteMonitor.reset()
+        if followedRoute != nil {
+            // Only ask a runner who is following a route, so the prompt is
+            // never shown to someone who would get no alerts anyway.
+            RunNotifications.requestAuthorization()
+        }
         lastRun = nil
         phase = .running
         resetPublishedMetrics()
@@ -281,6 +297,34 @@ final class RunTracker: NSObject, ObservableObject {
         lastAcceptedFixAt = Date()
         lastRejectionReason = nil
         trackingWarning = nil
+    }
+
+    /// Measures the fix against the followed route and reacts when the runner
+    /// strays or returns. Does nothing when no route is being followed.
+    private func checkOffRoute(at location: CLLocation, elapsed: TimeInterval) {
+        guard let route = followedRoute, route.line.count >= 2 else { return }
+        let point = RoutePoint(latitude: location.coordinate.latitude,
+                               longitude: location.coordinate.longitude)
+        guard let distance = RouteGeometry.distanceToLine(from: point, line: route.line) else { return }
+
+        switch offRouteMonitor.update(
+            distanceFromLine: distance,
+            accuracy: location.horizontalAccuracy,
+            elapsed: elapsed
+        ) {
+        case .wentOffRoute:
+            isOffRoute = true
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            RunNotifications.offRoute()
+            activityController.update(activityState(), force: true)
+        case .returnedToRoute:
+            isOffRoute = false
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            RunNotifications.clearOffRoute()
+            activityController.update(activityState(), force: true)
+        case nil:
+            break
+        }
     }
 
     private func noteRejectedFix(_ reason: FixRejection) {
@@ -348,6 +392,7 @@ extension RunTracker: @preconcurrency CLLocationManagerDelegate {
 
             noteAcceptedFix()
             accumulator.recordAltitude(location.altitude, verticalAccuracy: location.verticalAccuracy)
+            checkOffRoute(at: location, elapsed: locationElapsed)
 
             trackPoints.append(
                 TrackPoint(

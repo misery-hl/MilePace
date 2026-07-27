@@ -31,6 +31,7 @@ struct RunActivityAttributes: ActivityAttributes {
         var elapsed: TimeInterval
         var elevationGainMeters: Double
         var isPaused: Bool
+        var isOffRoute: Bool
         var compactMetric: CompactMetric
         /// Set when a goal is being followed. Positive is behind the target.
         var goalName: String?

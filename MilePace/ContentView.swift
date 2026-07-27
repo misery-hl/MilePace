@@ -408,6 +408,18 @@ private struct RunDashboardView: View {
                 MetricCard(title: "LIVE PACE", value: tracker.rollingPace?.paceText ?? "--:--", unit: "/mi")
             }
 
+            if tracker.isOffRoute {
+                Label("Off route — you have strayed from the route you are following.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel("Off route. You have strayed from the route you are following.")
+            }
+
             if let route = tracker.followedRoute {
                 FollowedRouteMap(route: route)
                     .frame(height: 200)
