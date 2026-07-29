@@ -11,7 +11,7 @@ struct RunShareButton: View {
         Button {
             isComposerPresented = true
         } label: {
-            Label("Share Run", systemImage: "square.and.arrow.up")
+            Label("Share \(record.activityKind.displayName)", systemImage: "square.and.arrow.up")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
@@ -262,9 +262,8 @@ private struct RunShareComposer: View {
     }
 
     private var caption: String {
-        let distance = String(format: "%.2f", record.distanceMiles)
-        let pace = record.averagePace?.paceText ?? "--:--"
-        return "I ran \(distance) miles in \(record.activeDuration.clockText) at \(pace)/mi with MilePace — a free, open-source running app. https://github.com/misery-hl/MilePace"
+        let verb = record.activityKind.pastTenseVerb
+        return "I \(verb) \(record.distanceText) in \(record.activeDuration.clockText) at \(record.paceText) with MilePace — a free, open-source running app. https://github.com/misery-hl/MilePace"
     }
 }
 
@@ -359,7 +358,7 @@ private struct BrandedMapCanvas: View {
                         VStack(alignment: .leading, spacing: 4 * scale) {
                             Text("MilePace")
                                 .font(.system(size: 52 * scale, weight: .bold, design: .rounded))
-                            Text("RUN COMPLETE")
+                            Text("\(record.activityKind.displayName.uppercased()) COMPLETE")
                                 .font(.system(size: 22 * scale, weight: .bold))
                                 .tracking(4 * scale)
                                 .foregroundStyle(.mint)
@@ -371,19 +370,19 @@ private struct BrandedMapCanvas: View {
 
                     Spacer(minLength: 24 * scale)
 
-                    Text(String(format: "%.2f", record.distanceMiles))
+                    Text(record.distanceMetric.value)
                         .font(.system(size: 152 * scale, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.66)
-                    Text("MILES")
+                    Text(record.distanceUnitHeadline)
                         .font(.system(size: 30 * scale, weight: .bold))
                         .tracking(7 * scale)
                         .foregroundStyle(.white.opacity(0.7))
 
                     HStack(spacing: 14 * scale) {
                         CanvasMetric(title: "TIME", value: record.activeDuration.clockText, scale: scale)
-                        CanvasMetric(title: "AVG PACE", value: (record.averagePace?.paceText ?? "--:--") + "/mi", scale: scale)
+                        CanvasMetric(title: record.paceMetric.title, value: record.paceText, scale: scale)
                     }
                     .padding(.top, 34 * scale)
 
@@ -458,20 +457,22 @@ private struct ShareOverlayCanvas: View {
         VStack(alignment: .leading, spacing: 20 * scale) {
             ShareCanvasBrand(scale: scale)
             Spacer()
-            Text(String(format: "%.2f", record.distanceMiles))
+            Text(record.distanceMetric.value)
                 .font(.system(size: 188 * scale, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text("MILES")
+            Text(record.distanceUnitHeadline)
                 .font(.system(size: 34 * scale, weight: .bold))
                 .tracking(8 * scale)
                 .foregroundStyle(.white.opacity(0.8))
 
             VStack(spacing: 14 * scale) {
                 OverlayMetricRow(title: "ACTIVE TIME", value: record.activeDuration.clockText, scale: scale)
-                OverlayMetricRow(title: "AVERAGE PACE", value: (record.averagePace?.paceText ?? "--:--") + "/mi", scale: scale)
-                OverlayMetricRow(title: "FASTEST MILE", value: record.fastestMile?.duration.paceText ?? "--:--", scale: scale)
+                OverlayMetricRow(title: "AVERAGE \(record.paceMetric.title == "AVG SPEED" ? "SPEED" : "PACE")", value: record.paceText, scale: scale)
+                if let fastest = record.fastestMile {
+                    OverlayMetricRow(title: "FASTEST MILE", value: fastest.duration.paceText, scale: scale)
+                }
             }
             .padding(.top, 26 * scale)
         }
@@ -502,12 +503,12 @@ private struct ShareOverlayCanvas: View {
                 .frame(height: 520 * scale)
                 .padding(.horizontal, 36 * scale)
             Spacer()
-            Text(String(format: "%.2f mi", record.distanceMiles))
+            Text(record.distanceText)
                 .font(.system(size: 126 * scale, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text("\(record.activeDuration.clockText)  •  \(record.averagePace?.paceText ?? "--:--")/mi")
+            Text("\(record.activeDuration.clockText)  •  \(record.paceText)")
                 .font(.system(size: 36 * scale, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.9))
                 .padding(.top, 10 * scale)
@@ -523,16 +524,16 @@ private struct ShareOverlayCanvas: View {
             VStack(alignment: .leading, spacing: 18 * scale) {
                 ShareCanvasBrand(scale: scale)
                 HStack(alignment: .lastTextBaseline, spacing: 18 * scale) {
-                    Text(String(format: "%.2f", record.distanceMiles))
+                    Text(record.distanceMetric.value)
                         .font(.system(size: 112 * scale, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.62)
-                    Text("MI")
+                    Text(record.distanceMetric.unit.uppercased())
                         .font(.system(size: 36 * scale, weight: .bold))
                         .foregroundStyle(.mint)
                 }
-                Text("\(record.activeDuration.clockText)  •  \(record.averagePace?.paceText ?? "--:--")/mi")
+                Text("\(record.activeDuration.clockText)  •  \(record.paceText)")
                     .font(.system(size: 34 * scale, weight: .bold, design: .rounded))
                     .monospacedDigit()
             }

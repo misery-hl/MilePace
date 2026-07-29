@@ -7,3 +7,6 @@ build/
 xcuserdata/
 *.ipa
 *.dSYM.zip
+
+# Local Xcode workspace preferences, not shared settings.
+MilePace.xcodeproj/project.xcworkspace/

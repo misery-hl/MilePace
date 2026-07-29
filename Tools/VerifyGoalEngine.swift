@@ -481,6 +481,72 @@ enum VerifyGoalEngine {
         check(ActivityKind.bike.usesPacePerMile == false, "a bike is not paced per mile")
         check(ActivityKind.swim.usesPacePerMile == false, "a swim is not paced per mile")
 
+        // Each activity states its distance and its speed in its own unit.
+        // One hour over ten miles: an 6:00 mile, and 10.0 mph.
+        let tenMiles = metersPerMile * 10
+        func sample(_ kind: ActivityKind, meters: Double, seconds: TimeInterval) -> RunRecord {
+            RunRecord(id: UUID(), startedAt: Date(), endedAt: Date(),
+                      distanceMeters: meters, activeDuration: seconds,
+                      mileSplits: [], activityKind: kind)
+        }
+
+        let hourRun = sample(.run, meters: tenMiles, seconds: 3_600)
+        check(hourRun.distanceMetric.unit == "mi", "a run states a distance in miles")
+        check(hourRun.paceMetric.title == "AVG PACE", "a run reports a pace")
+        check(hourRun.paceMetric.unit == "/mi", "a run paces per mile")
+        check(hourRun.paceText == "6:00/mi", "ten miles in an hour is a 6:00 mile")
+
+        let hourRide = sample(.bike, meters: tenMiles, seconds: 3_600)
+        check(hourRide.distanceMetric.unit == "mi", "a ride states a distance in miles")
+        check(hourRide.paceMetric.title == "AVG SPEED", "a ride reports a speed, not a pace")
+        check(hourRide.paceMetric.unit == "mph", "a ride is stated in miles per hour")
+        check(nearly(hourRide.averageSpeedMph ?? 0, 10, tolerance: 0.01),
+              "ten miles in an hour is 10 mph")
+        check(hourRide.paceText == "10.0 mph", "a speed reads as a separate word")
+
+        // A 1,650 yard swim, the classic mile, in 33:00 is a 2:00 per 100.
+        let swim = sample(.swim, meters: 1_650 * metersPerYard, seconds: 1_980)
+        check(swim.distanceMetric.unit == "yd", "a swim states a distance in yards")
+        check(swim.distanceMetric.value == "1650", "a swim distance is whole yards")
+        check(swim.distanceUnitHeadline == "YARDS", "a swim card is headed YARDS")
+        check(swim.paceText == "2:00/100yd", "1,650 yards in 33:00 is a 2:00 per 100")
+        check(nearly(swim.distanceYards, 1_650, tolerance: 0.01), "yards convert exactly")
+
+        let hike = sample(.hike, meters: tenMiles, seconds: 7_200)
+        check(hike.paceMetric.unit == "/mi", "a hike paces per mile")
+        check(hike.paceText == "12:00/mi", "ten miles in two hours is a 12:00 mile")
+        check(hike.distanceUnitHeadline == "MILES", "a hike card is headed MILES")
+
+        // A record too short to pace must not invent one. An Oura workout with
+        // no distance would otherwise reach a screen as a fictional pace.
+        let distanceless = sample(.run, meters: 0, seconds: 1_800)
+        check(distanceless.averagePace == nil, "no distance yields no pace")
+        check(distanceless.averageSpeedMph == nil, "no distance yields no speed")
+        check(distanceless.averagePacePer100Yards == nil, "no distance yields no swim pace")
+        check(distanceless.paceMetric.value == "--:--", "it reads as unknown, not as zero")
+        check(sample(.bike, meters: 0, seconds: 1_800).paceMetric.value == "--",
+              "an unknown speed reads as unknown too")
+
+        // Only a phone-recorded run or hike can gain a mile split. Prompting a
+        // rider to "complete a mile" of an 18 mile ride is nonsense.
+        check(hourRun.canRecordMileSplits, "a phone-recorded run can split by mile")
+        check(hike.canRecordMileSplits, "a phone-recorded hike can split by mile")
+        check(swim.canRecordMileSplits == false, "a swim does not split by mile")
+        check(hourRide.canRecordMileSplits == false, "a ride does not split by mile")
+        check(imported.canRecordMileSplits == false, "an imported record cannot gain a split")
+
+        // The names a screen puts on an activity.
+        check(ActivityKind.run.displayName == "Run", "a run is titled Run")
+        check(ActivityKind.bike.displayName == "Ride", "a bike is titled Ride")
+        check(ActivityKind.swim.displayName == "Swim", "a swim is titled Swim")
+        check(ActivityKind.hike.displayName == "Hike", "a hike is titled Hike")
+
+        // The verbs a share caption uses.
+        check(ActivityKind.run.pastTenseVerb == "ran", "a run reads as ran")
+        check(ActivityKind.bike.pastTenseVerb == "rode", "a bike reads as rode")
+        check(ActivityKind.swim.pastTenseVerb == "swam", "a swim reads as swam")
+        check(ActivityKind.hike.pastTenseVerb == "hiked", "a hike reads as hiked")
+
         // Route geometry: distance, and how far a point strays from the line.
         // Two points ~111 m apart in latitude (0.001 deg).
         let a = RoutePoint(latitude: 40.000, longitude: -75.000)
