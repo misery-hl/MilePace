@@ -425,6 +425,62 @@ enum VerifyGoalEngine {
         check(preArchive?.count == 1, "a run saved before archiving still decodes")
         check(preArchive?.first?.isArchived == false, "it decodes as not archived")
 
+        // Runs saved before the Apple Health import read as phone-recorded runs.
+        check(preArchive?.first?.activityKind == .run, "an older run decodes as a run")
+        check(preArchive?.first?.source == .phoneGPS, "an older run decodes as phone-recorded")
+        check(preArchive?.first?.externalIdentifier == nil, "an older run carries no import identifier")
+        check(preArchive?.first?.averageHeartRate == nil, "an older run carries no heart rate")
+        check(preArchive?.first?.activeEnergyKcal == nil, "an older run carries no energy")
+        check(nearly(preArchive?.first?.distanceMeters ?? 0, 5000),
+              "the older run keeps its distance through the wider model")
+
+        // An activity kind this version does not know must not fail the decode.
+        // One unreadable record fails the whole file, and there is no backup.
+        let futureKindJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-00000000000F","startedAt":770000000,"endedAt":770000900,
+        "distanceMeters":5000,"activeDuration":900,"mileSplits":[],"activityKind":"kayak",
+        "source":"quantumEntanglement"}]
+        """
+        let futureKind = try? JSONDecoder().decode([RunRecord].self, from: Data(futureKindJSON.utf8))
+        check(futureKind?.count == 1, "an unknown activity kind still decodes")
+        check(futureKind?.first?.activityKind == .run, "an unknown kind falls back to a run")
+        check(futureKind?.first?.source == .phoneGPS, "an unknown source falls back to phone-recorded")
+
+        // Apple Health has many writers, so a measurement can arrive unusable.
+        // Such a value must not reach a screen and must not reach runs.json.
+        let badMeasurementJSON = """
+        [{"id":"E1F1A1D2-0000-4000-8000-000000000010","startedAt":770000000,"endedAt":770000900,
+        "distanceMeters":5000,"activeDuration":900,"mileSplits":[],"averageHeartRate":-12,
+        "maxHeartRate":0,"activeEnergyKcal":410}]
+        """
+        let badMeasurement = try? JSONDecoder().decode([RunRecord].self, from: Data(badMeasurementJSON.utf8))
+        check(badMeasurement?.first?.averageHeartRate == nil, "a negative heart rate is discarded")
+        check(badMeasurement?.first?.maxHeartRate == nil, "a zero heart rate is discarded")
+        check(nearly(badMeasurement?.first?.activeEnergyKcal ?? 0, 410), "a sound energy value survives")
+
+        // An imported workout keeps what Apple Health reported.
+        let imported = RunRecord(
+            id: UUID(), startedAt: Date(), endedAt: Date(),
+            distanceMeters: twoMiles, activeDuration: 900, mileSplits: [],
+            activityKind: .bike, source: .healthKit,
+            externalIdentifier: "A-WORKOUT-UUID", averageHeartRate: 142
+        )
+        check(imported.activityKind == .bike, "an imported record keeps its kind")
+        check(imported.externalIdentifier == "A-WORKOUT-UUID", "it keeps the workout identifier")
+        check(nearly(imported.averageHeartRate ?? 0, 142), "it keeps the heart rate")
+        check(imported.hasRoute == false, "a workout with no route reports no route")
+
+        // A record survives an encode and a decode with every new field intact.
+        let importedRoundTrip = (try? JSONEncoder().encode([imported]))
+            .flatMap { try? JSONDecoder().decode([RunRecord].self, from: $0) }?.first
+        check(importedRoundTrip == imported, "an imported record survives a round trip")
+
+        // Only a run and a hike are measured in minutes per mile.
+        check(ActivityKind.run.usesPacePerMile, "a run is paced per mile")
+        check(ActivityKind.hike.usesPacePerMile, "a hike is paced per mile")
+        check(ActivityKind.bike.usesPacePerMile == false, "a bike is not paced per mile")
+        check(ActivityKind.swim.usesPacePerMile == false, "a swim is not paced per mile")
+
         // Route geometry: distance, and how far a point strays from the line.
         // Two points ~111 m apart in latitude (0.001 deg).
         let a = RoutePoint(latitude: 40.000, longitude: -75.000)
