@@ -228,9 +228,8 @@ private struct RunRowLink: View {
     }
 
     private var deleteWarning: String {
-        let distance = String(format: "%.2f mi", record.distanceMiles)
         let goals = goalStore.goalsContaining(runID: record.id)
-        var message = "This deletes your \(distance) run from \(record.startedAt.formatted(date: .abbreviated, time: .shortened)). "
+        var message = "This deletes your \(record.distanceText) \(record.activityKind.displayName.lowercased()) from \(record.startedAt.formatted(date: .abbreviated, time: .shortened)). "
 
         if !goals.isEmpty {
             let names = goals.map(\.displayName).joined(separator: ", ")
@@ -546,9 +545,9 @@ private struct RunDetailView: View {
             }
 
             HStack(spacing: 10) {
-                MetricCard(title: "DISTANCE", value: String(format: "%.2f", record.distanceMiles), unit: "mi")
+                MetricCard(record.distanceMetric)
                 MetricCard(title: "TIME", value: record.activeDuration.clockText, unit: "active")
-                MetricCard(title: "AVG PACE", value: record.averagePace?.paceText ?? "--:--", unit: "/mi")
+                MetricCard(record.paceMetric)
             }
 
             if record.hasMeaningfulElevation {
@@ -565,10 +564,16 @@ private struct RunDetailView: View {
             }
 
             if record.mileSplits.isEmpty {
-                Text("Complete a mile to record your first split.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // The prompt only makes sense while a mile is still reachable.
+                // An imported workout carries no splits and never gains any, so
+                // telling a rider to complete a mile of an 18 mile ride is
+                // nonsense. A record with no splits stays silent instead.
+                if record.canRecordMileSplits {
+                    Text("Complete a mile to record your first split.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("MILE SPLITS")
@@ -590,7 +595,7 @@ private struct RunDetailView: View {
 
             RunShareButton(record: record)
         }
-        .navigationTitle("Run")
+        .navigationTitle(record.activityKind.displayName)
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -1469,6 +1474,18 @@ private struct MetricCard: View {
     let value: String
     let unit: String
 
+    init(title: String, value: String, unit: String) {
+        self.title = title
+        self.value = value
+        self.unit = unit
+    }
+
+    /// Takes the title, the value, and the unit the record chose for its own
+    /// activity, so a screen never picks the unit for itself.
+    init(_ metric: ActivityMetric) {
+        self.init(title: metric.title, value: metric.value, unit: metric.unit)
+    }
+
     var body: some View {
         VStack(spacing: 4) {
             Text(title)
@@ -1503,15 +1520,15 @@ private struct RunRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.headline)
-                Text(String(format: "%.2f mi  •  %@ active", record.distanceMiles, record.activeDuration.clockText))
+                Text("\(record.distanceText)  •  \(record.activeDuration.clockText) active")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 3) {
-                Text(record.averagePace?.paceText ?? "--:--")
+                Text(record.paceMetric.value)
                     .font(.headline.monospacedDigit())
-                Text("avg /mi")
+                Text("avg \(record.paceMetric.unit)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

@@ -1,6 +1,7 @@
 import Foundation
 
 let metersPerMile = 1_609.344
+let metersPerYard = 0.9144
 
 struct MileSplit: Codable, Equatable, Identifiable {
     let mile: Int
@@ -107,6 +108,36 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable, Equatable {
         case .bike, .swim: return false
         }
     }
+
+    /// The name to put on a screen.
+    var displayName: String {
+        switch self {
+        case .run: return "Run"
+        case .hike: return "Hike"
+        case .bike: return "Ride"
+        case .swim: return "Swim"
+        }
+    }
+
+    /// The verb for a share caption. "I ran", "I hiked", "I rode", "I swam".
+    var pastTenseVerb: String {
+        switch self {
+        case .run: return "ran"
+        case .hike: return "hiked"
+        case .bike: return "rode"
+        case .swim: return "swam"
+        }
+    }
+}
+
+/// One labelled number for a screen: a title, a value, and a unit. It keeps the
+/// choice of unit in one place. Four share layouts and three list rows each
+/// chose the unit for themselves before this existed, so a change had to be
+/// made seven times and could be missed in six of them.
+struct ActivityMetric: Equatable {
+    let title: String
+    let value: String
+    let unit: String
 }
 
 /// Where a record came from. A run that the phone recorded holds a full GPS
@@ -275,6 +306,97 @@ struct RunRecord: Codable, Equatable, Identifiable {
     var averagePace: TimeInterval? {
         guard distanceMeters >= 30 else { return nil }
         return activeDuration / distanceMeters * metersPerMile
+    }
+
+    /// Distance in yards. A swimmer states a distance in yards, not in miles.
+    var distanceYards: Double {
+        distanceMeters / metersPerYard
+    }
+
+    /// Average speed in miles per hour. A cyclist states a ride this way. The
+    /// same ride stated as a pace reads as a 3:20 mile, which is true and
+    /// useless.
+    var averageSpeedMph: Double? {
+        guard distanceMeters >= 30, activeDuration > 0 else { return nil }
+        return distanceMeters / activeDuration / metersPerMile * 3_600
+    }
+
+    /// Time for every 100 yards. How a swimmer states a pace.
+    var averagePacePer100Yards: TimeInterval? {
+        guard distanceMeters >= 30 else { return nil }
+        let hundreds = distanceYards / 100
+        guard hundreds > 0 else { return nil }
+        return activeDuration / hundreds
+    }
+
+    /// The distance, in the unit this activity is stated in.
+    var distanceMetric: ActivityMetric {
+        switch activityKind {
+        case .swim:
+            return ActivityMetric(
+                title: "DISTANCE",
+                value: String(format: "%.0f", distanceYards),
+                unit: "yd"
+            )
+        case .run, .hike, .bike:
+            return ActivityMetric(
+                title: "DISTANCE",
+                value: String(format: "%.2f", distanceMiles),
+                unit: "mi"
+            )
+        }
+    }
+
+    /// The headline speed figure, in the unit this activity is stated in.
+    var paceMetric: ActivityMetric {
+        switch activityKind {
+        case .run, .hike:
+            return ActivityMetric(
+                title: "AVG PACE",
+                value: averagePace?.paceText ?? "--:--",
+                unit: "/mi"
+            )
+        case .bike:
+            return ActivityMetric(
+                title: "AVG SPEED",
+                value: averageSpeedMph.map { String(format: "%.1f", $0) } ?? "--",
+                unit: "mph"
+            )
+        case .swim:
+            return ActivityMetric(
+                title: "AVG PACE",
+                value: averagePacePer100Yards?.paceText ?? "--:--",
+                unit: "/100yd"
+            )
+        }
+    }
+
+    /// The distance and the unit together, for a line of running text.
+    var distanceText: String {
+        "\(distanceMetric.value) \(distanceMetric.unit)"
+    }
+
+    /// The distance unit spelled out, for the large label on a share card.
+    var distanceUnitHeadline: String {
+        activityKind == .swim ? "YARDS" : "MILES"
+    }
+
+    /// Whether mile splits are possible for this record at all. The phone
+    /// measures a split as it crosses a mile boundary. Apple Health reports a
+    /// finished workout, so an imported record has no splits and cannot gain
+    /// any. A swim is not measured in miles either.
+    var canRecordMileSplits: Bool {
+        source == .phoneGPS && activityKind.usesPacePerMile
+    }
+
+    /// The pace and the unit together, for a line of running text. A pace unit
+    /// begins with a slash and joins the value directly; a speed unit is a
+    /// separate word.
+    var paceText: String {
+        let metric = paceMetric
+        return metric.unit.hasPrefix("/")
+            ? metric.value + metric.unit
+            : "\(metric.value) \(metric.unit)"
     }
 
     var fastestMile: MileSplit? {
