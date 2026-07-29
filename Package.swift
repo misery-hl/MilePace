@@ -22,6 +22,8 @@ let package = Package(
                 "PrivacyInfo.xcprivacy",
                 "RouteStore.swift",
                 "RouteViews.swift",
+                "ShareImageLoader.swift",
+                "ShareViews.swift",
                 "RunStore.swift",
                 "RunTracker.swift"
             ],

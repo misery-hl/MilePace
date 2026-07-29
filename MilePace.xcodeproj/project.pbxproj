@@ -25,6 +25,8 @@
 		B00000000000000000000014 /* RouteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* RouteStore.swift */; };
 		B00000000000000000000015 /* RouteViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* RouteViews.swift */; };
 		B00000000000000000000016 /* RunNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* RunNotifications.swift */; };
+		B00000000000000000000017 /* ShareViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000019 /* ShareViews.swift */; };
+		B00000000000000000000018 /* ShareImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000020 /* ShareImageLoader.swift */; };
 		B00000000000000000000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* Assets.xcassets */; };
 		B00000000000000000000008 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* PrivacyInfo.xcprivacy */; };
 		B00000000000000000000009 /* RunAccumulatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000A /* RunAccumulatorTests.swift */; };
@@ -66,6 +68,8 @@
 		A00000000000000000000016 /* RouteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteStore.swift; sourceTree = "<group>"; };
 		A00000000000000000000017 /* RouteViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteViews.swift; sourceTree = "<group>"; };
 		A00000000000000000000018 /* RunNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifications.swift; sourceTree = "<group>"; };
+		A00000000000000000000019 /* ShareViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViews.swift; sourceTree = "<group>"; };
+		A00000000000000000000020 /* ShareImageLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareImageLoader.swift; sourceTree = "<group>"; };
 		A00000000000000000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00000000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A00000000000000000000009 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -114,6 +118,8 @@
 				A00000000000000000000004 /* RunAccumulator.swift */,
 				A00000000000000000000005 /* RunStore.swift */,
 				A00000000000000000000018 /* RunNotifications.swift */,
+				A00000000000000000000019 /* ShareViews.swift */,
+				A00000000000000000000020 /* ShareImageLoader.swift */,
 				A00000000000000000000016 /* RouteStore.swift */,
 				A00000000000000000000017 /* RouteViews.swift */,
 				A00000000000000000000010 /* RunActivityAttributes.swift */,
@@ -288,6 +294,8 @@
 				B00000000000000000000004 /* RunAccumulator.swift in Sources */,
 				B00000000000000000000005 /* RunStore.swift in Sources */,
 				B00000000000000000000016 /* RunNotifications.swift in Sources */,
+				B00000000000000000000017 /* ShareViews.swift in Sources */,
+				B00000000000000000000018 /* ShareImageLoader.swift in Sources */,
 				B00000000000000000000014 /* RouteStore.swift in Sources */,
 				B00000000000000000000015 /* RouteViews.swift in Sources */,
 				B0000000000000000000000D /* RunActivityAttributes.swift in Sources */,

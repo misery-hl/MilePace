@@ -1,6 +1,6 @@
 # MilePace Claude Code Handoff
 
-Last updated: 2026-07-21
+Last updated: 2026-07-27
 
 This file is the source-of-truth handoff for continuing MilePace with Claude Code. Read it before editing, and update it when the facts below stop being true.
 
@@ -129,7 +129,7 @@ The data and logic layers are deliberately split from the UI so they can be chec
 - **Elevation gain and loss per run, filtered so GPS altitude noise does not invent climb.**
 - **A Live Activity on the Lock Screen and in the Dynamic Island while a run is active.**
 - **Routes: build a custom route by tapping corners on a map (MapKit walking directions fill the path), or turn a past run into a route. Follow one to see it on the running screen. Follow one to see it on the running screen, with an off-route alert when you stray, and a route map with your live dot on the Lock Screen. After a run the app has seen you do before, it offers to save it as a route, unless the runner turns suggestions off.**
-- Post-run social share card and native iOS share sheet.
+- **Post-run sharing opens a swipeable four-style composer: branded map, metric stack, route focus, and compact. The overlay styles export with transparent backgrounds when no photo is selected. A selected local photo stays only in the composer session. The native iOS share sheet opens after the image is ready.**
 - Privacy manifest declaring no tracking or collected/transmitted data.
 - 1024x1024 opaque app icon and an icon-generation utility.
 
@@ -139,7 +139,11 @@ The data and logic layers are deliberately split from the UI so they can be chec
   - Creates and injects `RunStore` and `RunTracker`.
   - Refreshes elapsed state when the app becomes active.
 - `MilePace/ContentView.swift`
-  - Start screen, live run dashboard, saved-run details, summary, route map, and social sharing.
+  - Start screen, live run dashboard, saved-run details, summary, and route map. It opens the share composer through `RunShareButton`.
+- `MilePace/ShareViews.swift`
+  - `RunShareButton`, the full-screen swipeable Share Run composer, four share layouts, route and metric rendering, and the native share sheet. It renders 1080 by 1350 images. A selected local photo remains in memory for that composer session only.
+- `MilePace/ShareImageLoader.swift`
+  - Decodes and orientation-corrects the selected local photo with ImageIO before the composer uses it.
 - `MilePace/RunTracker.swift`
   - Core Location lifecycle, authorization, filtering, pause/resume timing, background updates, haptics, trackpoint recording, and saving finished runs.
 - `MilePace/RunAccumulator.swift`
@@ -157,7 +161,7 @@ The data and logic layers are deliberately split from the UI so they can be chec
 - `MilePace/RunNotifications.swift`
   - Local notifications for the locked-screen off-route alert. `OffRouteMonitor` (in `Models.swift`) is the pure threshold/hysteresis state machine behind it.
 - `MilePace/RouteViews.swift`
-  - All route UI: the map builder, the routes list, route detail, and the followed-route map. Also `RouteDirections`, which calls MapKit `MKDirections` for on-device walking paths — no key, no backend. App-only, excluded from `MilePaceCore`.
+  - All route UI: the map builder, the routes list, route detail, and the followed-route map. It also provides share-map snapshots. `RouteDirections` calls MapKit `MKDirections` for on-device walking paths — no key, no backend. App-only, excluded from `MilePaceCore`.
 - `MilePaceTests/RunAccumulatorTests.swift`
   - XCTest coverage for pace and split calculations.
 - `Tools/VerifyPaceEngine.swift`
