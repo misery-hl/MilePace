@@ -702,8 +702,9 @@ struct RouteSuggestionCard: View {
 /// `MKMapSnapshotter` and the route line is drawn on top with Core Graphics.
 enum RouteSnapshotter {
     @MainActor
-    static func snapshot(route: [RoutePoint], size: CGSize) async -> UIImage? {
-        guard route.count >= 2, let bounds = RouteGeometry.bounds(of: route) else { return nil }
+    static func snapshot(segments: [[RoutePoint]], size: CGSize) async -> UIImage? {
+        let points = segments.flatMap { $0 }
+        guard points.count >= 2, let bounds = RouteGeometry.bounds(of: points) else { return nil }
 
         let options = MKMapSnapshotter.Options()
         options.region = MKCoordinateRegion(
@@ -730,9 +731,11 @@ enum RouteSnapshotter {
             cg.setLineJoin(.round)
             cg.setStrokeColor(UIColor.systemMint.cgColor)
 
-            for (index, point) in route.enumerated() {
-                let pixel = snapshot.point(for: point.coordinate)
-                if index == 0 { cg.move(to: pixel) } else { cg.addLine(to: pixel) }
+            for segment in segments where !segment.isEmpty {
+                cg.move(to: snapshot.point(for: segment[0].coordinate))
+                for point in segment.dropFirst() {
+                    cg.addLine(to: snapshot.point(for: point.coordinate))
+                }
             }
             cg.strokePath()
 
@@ -745,8 +748,8 @@ enum RouteSnapshotter {
                 cg.setFillColor(fill.cgColor)
                 cg.fillEllipse(in: rect)
             }
-            if let first = route.first { dot(first, fill: .systemMint) }
-            if let last = route.last { dot(last, fill: .white) }
+            if let first = points.first { dot(first, fill: .systemMint) }
+            if let last = points.last { dot(last, fill: .white) }
         }
     }
 }
