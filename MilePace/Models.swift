@@ -87,6 +87,36 @@ struct RouteBounds: Equatable {
     var longitudeSpan: Double { maxLongitude - minLongitude }
 }
 
+/// What kind of activity a record holds. It decides which units and which pace
+/// maths the app applies. A record saved before this existed reads as `.run`,
+/// which is true: the app could only record a run.
+enum ActivityKind: String, Codable, CaseIterable, Identifiable, Equatable {
+    case run
+    case hike
+    case bike
+    case swim
+
+    var id: String { rawValue }
+
+    /// Whether the app measures this activity in minutes per mile. A bike is
+    /// measured in miles per hour, and a swim in minutes per 100 yards, because
+    /// a pace per mile is not how a cyclist or a swimmer states a result.
+    var usesPacePerMile: Bool {
+        switch self {
+        case .run, .hike: return true
+        case .bike, .swim: return false
+        }
+    }
+}
+
+/// Where a record came from. A run that the phone recorded holds a full GPS
+/// trace and mile splits. An imported workout holds only what Apple Health
+/// reports, which may include no route at all.
+enum RunSource: String, Codable, Equatable {
+    case phoneGPS
+    case healthKit
+}
+
 struct RunRecord: Codable, Equatable, Identifiable {
     let id: UUID
     let startedAt: Date
@@ -103,6 +133,21 @@ struct RunRecord: Codable, Equatable, Identifiable {
     /// Hidden from the run lists, but kept. A run worth setting aside is not
     /// the same as a run worth destroying, and the history has no backup.
     var isArchived: Bool
+    /// Run, hike, bike, or swim. Every record saved before the import feature
+    /// existed is a run.
+    let activityKind: ActivityKind
+    /// Whether the phone recorded this activity, or the app imported it.
+    let source: RunSource
+    /// The `HKWorkout` identifier, for a record that came from Apple Health.
+    /// It stops the app from importing one workout two times. It is `nil` for a
+    /// run that the phone recorded.
+    let externalIdentifier: String?
+    /// Heart rate in beats per minute. Apple Health supplies these. The phone
+    /// alone cannot measure them, so a phone-recorded run leaves them `nil`.
+    let averageHeartRate: Double?
+    let maxHeartRate: Double?
+    /// Active energy in kilocalories, as Apple Health reports it.
+    let activeEnergyKcal: Double?
 
     init(
         id: UUID,
@@ -114,7 +159,13 @@ struct RunRecord: Codable, Equatable, Identifiable {
         trackPoints: [TrackPoint] = [],
         elevationGainMeters: Double = 0,
         elevationLossMeters: Double = 0,
-        isArchived: Bool = false
+        isArchived: Bool = false,
+        activityKind: ActivityKind = .run,
+        source: RunSource = .phoneGPS,
+        externalIdentifier: String? = nil,
+        averageHeartRate: Double? = nil,
+        maxHeartRate: Double? = nil,
+        activeEnergyKcal: Double? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -126,6 +177,21 @@ struct RunRecord: Codable, Equatable, Identifiable {
         self.elevationGainMeters = elevationGainMeters
         self.elevationLossMeters = elevationLossMeters
         self.isArchived = isArchived
+        self.activityKind = activityKind
+        self.source = source
+        self.externalIdentifier = externalIdentifier
+        self.averageHeartRate = RunRecord.usableMeasurement(averageHeartRate)
+        self.maxHeartRate = RunRecord.usableMeasurement(maxHeartRate)
+        self.activeEnergyKcal = RunRecord.usableMeasurement(activeEnergyKcal)
+    }
+
+    /// Rejects a measurement that no screen can show. Apple Health is a wider
+    /// set of writers than the app's own tracker, so a value can arrive as a
+    /// NaN, an infinity, or a negative number. Such a value must not reach the
+    /// UI, and it must not reach `runs.json` either.
+    private static func usableMeasurement(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value > 0 else { return nil }
+        return value
     }
 
     /// Decodes `trackPoints` leniently so run histories written before route
@@ -142,6 +208,25 @@ struct RunRecord: Codable, Equatable, Identifiable {
         elevationGainMeters = try container.decodeIfPresent(Double.self, forKey: .elevationGainMeters) ?? 0
         elevationLossMeters = try container.decodeIfPresent(Double.self, forKey: .elevationLossMeters) ?? 0
         isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived) ?? false
+
+        // Decoded from the raw string, not from the enum, so a kind that a
+        // later version writes cannot fail the decode. One unreadable record
+        // fails the whole `runs.json` array, and the history has no backup.
+        let kindName = try container.decodeIfPresent(String.self, forKey: .activityKind)
+        activityKind = kindName.flatMap(ActivityKind.init(rawValue:)) ?? .run
+        let sourceName = try container.decodeIfPresent(String.self, forKey: .source)
+        source = sourceName.flatMap(RunSource.init(rawValue:)) ?? .phoneGPS
+
+        externalIdentifier = try container.decodeIfPresent(String.self, forKey: .externalIdentifier)
+        averageHeartRate = RunRecord.usableMeasurement(
+            try container.decodeIfPresent(Double.self, forKey: .averageHeartRate)
+        )
+        maxHeartRate = RunRecord.usableMeasurement(
+            try container.decodeIfPresent(Double.self, forKey: .maxHeartRate)
+        )
+        activeEnergyKcal = RunRecord.usableMeasurement(
+            try container.decodeIfPresent(Double.self, forKey: .activeEnergyKcal)
+        )
     }
 
     var distanceMiles: Double {

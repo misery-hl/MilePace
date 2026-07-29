@@ -108,7 +108,9 @@ The data and logic layers are deliberately split from the UI so they can be chec
 
 **Backwards compatibility is a standing rule.** Every model has a custom `init(from:)` that defaults new fields, because the run and goal histories are local-first with no backup. Any new `Codable` field needs a check proving an old file still decodes; the pattern is all through `Tools/VerifyGoalEngine.swift`.
 
-**The check tools are the test suite.** There is no XCTest run in this workflow. `VerifyGoalEngine.swift` is now the main one (177 checks) and covers goals, prediction, formatting, elevation, archiving, and route geometry. Add to it when adding logic. The count is asserted in the final `print`, so a stale binary from a failed compile is easy to spot — the number does not move.
+**The check tools are the test suite.** There is no XCTest run in this workflow. `VerifyGoalEngine.swift` is now the main one (232 checks) and covers goals, prediction, formatting, elevation, archiving, route geometry, and the activity kinds. Add to it when adding logic. The count is asserted in the final `print`, so a stale binary from a failed compile is easy to spot — the number does not move.
+
+**Delete the binary before you recompile it.** `swiftc` leaves the previous binary in place when the compile fails, so running it prints the old count and looks like a pass. Prefix each check with `rm -f`.
 
 ## Implemented functionality
 
@@ -268,8 +270,11 @@ Passed 5 pace-engine checks
 Check the race prediction and goal comparison:
 
 ```sh
+rm -f /private/tmp/milepace-goal-check
+
 swiftc \
   MilePace/Models.swift \
+  MilePace/RunAccumulator.swift \
   MilePace/PacePrediction.swift \
   Tools/VerifyGoalEngine.swift \
   -o /private/tmp/milepace-goal-check
@@ -280,7 +285,7 @@ swiftc \
 Expected output includes:
 
 ```text
-Passed 211 goal-engine checks
+Passed 232 goal-engine checks
 ```
 
 Also run:
