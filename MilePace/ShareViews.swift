@@ -358,7 +358,7 @@ private struct BrandedMapCanvas: View {
                         VStack(alignment: .leading, spacing: 4 * scale) {
                             Text("MilePace")
                                 .font(.system(size: 52 * scale, weight: .bold, design: .rounded))
-                            Text("RUN COMPLETE")
+                            Text("\(record.activityKind.displayName.uppercased()) COMPLETE")
                                 .font(.system(size: 22 * scale, weight: .bold))
                                 .tracking(4 * scale)
                                 .foregroundStyle(.mint)
