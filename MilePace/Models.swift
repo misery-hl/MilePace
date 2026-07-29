@@ -57,6 +57,21 @@ enum RouteThinning {
 
         return kept
     }
+
+    /// Evenly thins a plain point list, keeping the first and last. Used to send
+    /// a route to the Live Activity small enough to draw and to fit the payload.
+    static func thinPoints(_ points: [RoutePoint], limit: Int) -> [RoutePoint] {
+        guard limit >= 2, points.count > limit else { return points }
+        let stride = Int((Double(points.count) / Double(limit)).rounded(.up))
+        guard stride > 1 else { return points }
+
+        var kept: [RoutePoint] = []
+        for index in Swift.stride(from: 0, to: points.count, by: stride) {
+            kept.append(points[index])
+        }
+        if kept.last != points.last, let last = points.last { kept.append(last) }
+        return kept
+    }
 }
 
 /// Latitude/longitude extent of a recorded route.
@@ -199,7 +214,7 @@ struct RunRecord: Codable, Equatable, Identifiable {
 
 /// One point on a planned route. Plain `Double`s, so this file stays free of
 /// Core Location and MapKit and the pace checks keep compiling it.
-struct RoutePoint: Codable, Equatable {
+struct RoutePoint: Codable, Equatable, Hashable {
     let latitude: Double
     let longitude: Double
 }

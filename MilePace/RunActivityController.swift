@@ -34,13 +34,17 @@ final class RunActivityController {
         activity != nil
     }
 
-    func start(startedAt: Date, state: RunActivityAttributes.ContentState) {
+    func start(
+        startedAt: Date,
+        routeLine: [RoutePoint] = [],
+        state: RunActivityAttributes.ContentState
+    ) {
         guard activity == nil else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
         do {
             activity = try Activity.request(
-                attributes: RunActivityAttributes(startedAt: startedAt),
+                attributes: RunActivityAttributes(routeLine: routeLine, startedAt: startedAt),
                 content: ActivityContent(state: state, staleDate: nil)
             )
             lastPushedAt = Date()

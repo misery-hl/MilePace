@@ -29,6 +29,10 @@ final class RunTracker: NSObject, ObservableObject {
     @Published private(set) var isOffRoute = false
 
     private var offRouteMonitor = OffRouteMonitor()
+    /// The most recent accepted position and its distance from the followed
+    /// route, so the Lock Screen map can draw the dot and the off-route figure.
+    private var lastUserPoint: RoutePoint?
+    private var lastRouteDistance: Double?
 
     private let locationManager = CLLocationManager()
     private let store: RunStore
@@ -234,7 +238,9 @@ final class RunTracker: NSObject, ObservableObject {
             isOffRoute: isOffRoute,
             compactMetric: activityController.compactMetric,
             goalName: goalName,
-            goalDeltaSeconds: goalDelta
+            goalDeltaSeconds: goalDelta,
+            userPoint: followedRoute == nil ? nil : lastUserPoint,
+            offRouteDistanceMeters: isOffRoute ? lastRouteDistance : nil
         )
     }
 
@@ -254,6 +260,8 @@ final class RunTracker: NSObject, ObservableObject {
         trackingWarning = nil
         isOffRoute = false
         offRouteMonitor.reset()
+        lastUserPoint = nil
+        lastRouteDistance = nil
         if followedRoute != nil {
             // Only ask a runner who is following a route, so the prompt is
             // never shown to someone who would get no alerts anyway.
@@ -265,7 +273,11 @@ final class RunTracker: NSObject, ObservableObject {
         startLocationUpdates()
         startTimer()
         UIApplication.shared.isIdleTimerDisabled = true
-        activityController.start(startedAt: now, state: activityState())
+        activityController.start(
+            startedAt: now,
+            routeLine: RouteThinning.thinPoints(followedRoute?.line ?? [], limit: 60),
+            state: activityState()
+        )
     }
 
     private func startLocationUpdates() {
@@ -305,7 +317,9 @@ final class RunTracker: NSObject, ObservableObject {
         guard let route = followedRoute, route.line.count >= 2 else { return }
         let point = RoutePoint(latitude: location.coordinate.latitude,
                                longitude: location.coordinate.longitude)
+        lastUserPoint = point
         guard let distance = RouteGeometry.distanceToLine(from: point, line: route.line) else { return }
+        lastRouteDistance = distance
 
         switch offRouteMonitor.update(
             distanceFromLine: distance,
@@ -323,7 +337,9 @@ final class RunTracker: NSObject, ObservableObject {
             RunNotifications.clearOffRoute()
             activityController.update(activityState(), force: true)
         case nil:
-            break
+            // No state change, but the dot still moved. The controller rate
+            // limits, so this is cheap.
+            activityController.update(activityState())
         }
     }
 

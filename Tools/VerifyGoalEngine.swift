@@ -523,6 +523,15 @@ enum VerifyGoalEngine {
         check(!RouteSuggestion.shouldSuggest(for: routeRun([], day: 5), existingRoutes: [], history: [firstRun]),
               "a run with no path is never suggested")
 
+        // Thinning a route for the Live Activity keeps the ends and the shape.
+        let denseRoute = (0...300).map { RoutePoint(latitude: 40.0 + Double($0) * 0.0001, longitude: -75.0) }
+        let thinnedRoute = RouteThinning.thinPoints(denseRoute, limit: 60)
+        check(thinnedRoute.count <= 61, "a route is thinned to the limit for the activity")
+        check(thinnedRoute.first == denseRoute.first, "thinning keeps the first point")
+        check(thinnedRoute.last == denseRoute.last, "thinning keeps the last point")
+        check(RouteThinning.thinPoints(Array(denseRoute.prefix(10)), limit: 60).count == 10,
+              "a short route is left alone")
+
         // Off-route detection: threshold, dwell, and hysteresis.
         var monitor = OffRouteMonitor()   // off at 40 m, on at 25 m, dwell 8 s
         // On the line: nothing happens.
