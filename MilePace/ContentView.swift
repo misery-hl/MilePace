@@ -7,6 +7,13 @@ struct ContentView: View {
     @EnvironmentObject private var tracker: RunTracker
     @EnvironmentObject private var store: RunStore
 
+    /// Set once the first-launch profile prompt has been shown. A runner sees
+    /// the prompt one time; after that, Body profile on the start screen is the
+    /// way in. Kept out of the profile file so a skip records nothing about the
+    /// body at all.
+    @AppStorage("MilePace.hasSeenProfileIntro") private var hasSeenProfileIntro = false
+    @State private var showProfileIntro = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -22,6 +29,17 @@ struct ContentView: View {
                 }
             }
             .tint(.mint)
+            .sheet(isPresented: $showProfileIntro, onDismiss: { hasSeenProfileIntro = true }) {
+                ProfileIntroView()
+            }
+            .onAppear {
+                // Only on a genuine first launch, and never over a run in
+                // progress, which cannot happen on first launch but is cheap to
+                // guard.
+                if !hasSeenProfileIntro, tracker.phase == .idle {
+                    showProfileIntro = true
+                }
+            }
             // A brief signal drop is not a permission problem. One title for
             // both made a passing glitch read as though access had been lost.
             .alert(tracker.authorizationStatus == .denied
@@ -711,14 +729,7 @@ private struct ProfileScreen: View {
     @State private var heightFeet: String = ""
     @State private var heightInches: String = ""
     @State private var sex: BiologicalSex = .unspecified
-    @FocusState private var focusedField: Field?
-
-    /// The number pads carry no return key, so a Done button on a keyboard
-    /// toolbar is the only way to put the keyboard away. Tracking which field
-    /// holds focus lets that button dismiss whichever one is open.
-    private enum Field {
-        case weight, feet, inches
-    }
+    @FocusState private var focusedField: ProfileField?
 
     var body: some View {
         ScrollView {
@@ -728,47 +739,13 @@ private struct ProfileScreen: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                field(title: "WEIGHT", footer: "Drives the calorie estimate.") {
-                    HStack {
-                        TextField("0", text: $weightPounds)
-                            .keyboardType(.decimalPad)
-                            .monospacedDigit()
-                            .focused($focusedField, equals: .weight)
-                        Text("lb").foregroundStyle(.secondary)
-                    }
-                }
-
-                field(title: "HEIGHT", footer: "Kept for your profile. It changes a running estimate very little.") {
-                    HStack(spacing: 12) {
-                        TextField("0", text: $heightFeet)
-                            .keyboardType(.numberPad)
-                            .monospacedDigit()
-                            .focused($focusedField, equals: .feet)
-                        Text("ft").foregroundStyle(.secondary)
-                        TextField("0", text: $heightInches)
-                            .keyboardType(.numberPad)
-                            .monospacedDigit()
-                            .focused($focusedField, equals: .inches)
-                        Text("in").foregroundStyle(.secondary)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("SEX")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                        .tracking(1.2)
-                    Picker("Sex", selection: $sex) {
-                        ForEach(BiologicalSex.allCases) { option in
-                            Text(shortName(option)).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                Label("Your weight, height, and sex never leave this iPhone.", systemImage: "lock.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                ProfileInputs(
+                    weightPounds: $weightPounds,
+                    heightFeet: $heightFeet,
+                    heightInches: $heightInches,
+                    sex: $sex,
+                    focusedField: $focusedField
+                )
             }
             .padding(20)
         }
@@ -776,49 +753,15 @@ private struct ProfileScreen: View {
         .navigationTitle("Body profile")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.mint)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focusedField = nil }
-                    .fontWeight(.semibold)
-            }
-        }
+        .toolbar { ProfileKeyboardDoneButton(focusedField: $focusedField) }
         .onAppear(perform: loadFromProfile)
+        // The tab saves as the runner types, so a change is never lost to a
+        // forgotten Save. The first-launch prompt does not, because a skip must
+        // leave nothing behind.
         .onChange(of: weightPounds) { _, _ in commit() }
         .onChange(of: heightFeet) { _, _ in commit() }
         .onChange(of: heightInches) { _, _ in commit() }
         .onChange(of: sex) { _, _ in commit() }
-    }
-
-    @ViewBuilder
-    private func field<Content: View>(
-        title: String,
-        footer: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-                .tracking(1.2)
-            content()
-                .font(.title3.bold())
-                .padding()
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-            Text(footer)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func shortName(_ sex: BiologicalSex) -> String {
-        switch sex {
-        case .female: return "Female"
-        case .male: return "Male"
-        case .unspecified: return "Skip"
-        }
     }
 
     private func loadFromProfile() {
@@ -834,24 +777,218 @@ private struct ProfileScreen: View {
         sex = profile.biologicalSex
     }
 
-    /// Parses the US-unit fields and writes the profile back in metric units.
-    /// An empty or unparseable field becomes `nil`, so clearing the weight
-    /// turns the estimate off rather than freezing the last value.
     private func commit() {
-        let kilograms = Double(weightPounds.trimmingCharacters(in: .whitespaces))
-            .map { $0 * poundsToKilograms }
-
-        let feet = Double(heightFeet.trimmingCharacters(in: .whitespaces)) ?? 0
-        let inches = Double(heightInches.trimmingCharacters(in: .whitespaces)) ?? 0
-        let totalInches = feet * 12 + inches
-        let centimetres = totalInches > 0 ? totalInches * centimetresPerInch : nil
-
-        profileStore.profile = UserProfile(
-            weightKilograms: kilograms,
-            heightCentimeters: centimetres,
-            biologicalSex: sex
+        profileStore.profile = makeUserProfile(
+            pounds: weightPounds, feet: heightFeet, inches: heightInches, sex: sex
         )
     }
+}
+
+/// The first-launch prompt. It offers the same fields as the tab, and a way to
+/// skip. Skipping saves nothing, so a runner who would rather not enter a weight
+/// is not left with a broken estimate; they can fill it later in Body profile.
+private struct ProfileIntroView: View {
+    @EnvironmentObject private var profileStore: ProfileStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var weightPounds: String = ""
+    @State private var heightFeet: String = ""
+    @State private var heightInches: String = ""
+    @State private var sex: BiologicalSex = .unspecified
+    @FocusState private var focusedField: ProfileField?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: 44))
+                                .foregroundStyle(.mint)
+                            Text("Estimate your calories")
+                                .font(.title2.bold())
+                            Text("MilePace can estimate the calories a run burns from your weight and your pace. Add your details, or skip and set them later in Body profile. Everything stays on this iPhone.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        ProfileInputs(
+                            weightPounds: $weightPounds,
+                            heightFeet: $heightFeet,
+                            heightInches: $heightInches,
+                            sex: $sex,
+                            focusedField: $focusedField
+                        )
+                    }
+                    .padding(20)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .navigationTitle("Welcome")
+            .navigationBarTitleDisplayMode(.inline)
+            .tint(.mint)
+            .toolbar { ProfileKeyboardDoneButton(focusedField: $focusedField) }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 10) {
+                    Button(action: saveAndClose) {
+                        Text("Save")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(.mint, in: RoundedRectangle(cornerRadius: 18))
+                            .foregroundStyle(.black)
+                    }
+                    Button("Skip for now") { dismiss() }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .background(.black)
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func saveAndClose() {
+        profileStore.profile = makeUserProfile(
+            pounds: weightPounds, feet: heightFeet, inches: heightInches, sex: sex
+        )
+        dismiss()
+    }
+}
+
+/// The weight, height, and sex fields, shared by the Body profile tab and the
+/// first-launch prompt so the two never drift apart. The focus binding lets
+/// either container drive the keyboard Done button.
+private struct ProfileInputs: View {
+    @Binding var weightPounds: String
+    @Binding var heightFeet: String
+    @Binding var heightInches: String
+    @Binding var sex: BiologicalSex
+    @FocusState.Binding var focusedField: ProfileField?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ProfileFieldCard(title: "WEIGHT", footer: "Drives the calorie estimate.") {
+                HStack {
+                    TextField("0", text: $weightPounds)
+                        .keyboardType(.decimalPad)
+                        .monospacedDigit()
+                        .focused($focusedField, equals: .weight)
+                    Text("lb").foregroundStyle(.secondary)
+                }
+            }
+
+            ProfileFieldCard(title: "HEIGHT", footer: "Kept for your profile. It changes a running estimate very little.") {
+                HStack(spacing: 12) {
+                    TextField("0", text: $heightFeet)
+                        .keyboardType(.numberPad)
+                        .monospacedDigit()
+                        .focused($focusedField, equals: .feet)
+                    Text("ft").foregroundStyle(.secondary)
+                    TextField("0", text: $heightInches)
+                        .keyboardType(.numberPad)
+                        .monospacedDigit()
+                        .focused($focusedField, equals: .inches)
+                    Text("in").foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("SEX")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                    .tracking(1.2)
+                Picker("Sex", selection: $sex) {
+                    ForEach(BiologicalSex.allCases) { option in
+                        Text(sexPickerName(option)).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Label("Your weight, height, and sex never leave this iPhone.", systemImage: "lock.fill")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// One labelled input card, matching the dark cards used elsewhere.
+private struct ProfileFieldCard<Content: View>: View {
+    let title: String
+    let footer: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+                .tracking(1.2)
+            content
+                .font(.title3.bold())
+                .padding()
+                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            Text(footer)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The keyboard toolbar Done button. The number pads carry no return key, so
+/// this is the only way to put the keyboard away.
+private struct ProfileKeyboardDoneButton: ToolbarContent {
+    @FocusState.Binding var focusedField: ProfileField?
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .keyboard) {
+            Spacer()
+            Button("Done") { focusedField = nil }
+                .fontWeight(.semibold)
+        }
+    }
+}
+
+private enum ProfileField {
+    case weight, feet, inches
+}
+
+private func sexPickerName(_ sex: BiologicalSex) -> String {
+    switch sex {
+    case .female: return "Female"
+    case .male: return "Male"
+    case .unspecified: return "Skip"
+    }
+}
+
+/// Parses the US-unit fields and returns a profile in metric units. An empty or
+/// unparseable field becomes `nil`, so clearing the weight turns the estimate
+/// off rather than freezing the last value.
+private func makeUserProfile(
+    pounds: String, feet: String, inches: String, sex: BiologicalSex
+) -> UserProfile {
+    let kilograms = Double(pounds.trimmingCharacters(in: .whitespaces))
+        .map { $0 * poundsToKilograms }
+    let ft = Double(feet.trimmingCharacters(in: .whitespaces)) ?? 0
+    let inch = Double(inches.trimmingCharacters(in: .whitespaces)) ?? 0
+    let totalInches = ft * 12 + inch
+    let centimetres = totalInches > 0 ? totalInches * centimetresPerInch : nil
+    return UserProfile(
+        weightKilograms: kilograms,
+        heightCentimeters: centimetres,
+        biologicalSex: sex
+    )
 }
 
 private let poundsToKilograms = 0.453_592_37
