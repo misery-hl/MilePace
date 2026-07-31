@@ -748,8 +748,10 @@ private struct ProfileScreen: View {
                 )
             }
             .padding(20)
+            .contentShape(Rectangle())
+            .onTapGesture { focusedField = nil }
         }
-        .scrollDismissesKeyboard(.interactively)
+        .scrollDismissesKeyboard(.immediately)
         .navigationTitle("Body profile")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.mint)
@@ -825,8 +827,10 @@ private struct ProfileIntroView: View {
                         )
                     }
                     .padding(20)
+                    .contentShape(Rectangle())
+                    .onTapGesture { focusedField = nil }
                 }
-                .scrollDismissesKeyboard(.interactively)
+                .scrollDismissesKeyboard(.immediately)
             }
             .navigationTitle("Welcome")
             .navigationBarTitleDisplayMode(.inline)
