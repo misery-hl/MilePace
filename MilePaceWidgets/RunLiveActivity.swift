@@ -14,14 +14,22 @@ struct RunLiveActivity: Widget {
                 .activitySystemActionForegroundColor(.mint)
         } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) {
-                    IslandMetric(title: "PACE", value: context.state.paceText, unit: "/mi")
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    IslandMetric(title: "DISTANCE", value: context.state.distanceText, unit: "mi")
-                }
+                // All three headline metrics live in one region, not spread
+                // across leading, center, and trailing. The center region sits
+                // below the camera, so a metric placed there lands lower than
+                // its neighbours, and the side regions clip a label against the
+                // rounded corners. One row keeps them aligned and clear of the
+                // edges.
                 DynamicIslandExpandedRegion(.center) {
-                    IslandMetric(title: "TIME", value: context.state.elapsedText, unit: "")
+                    HStack(alignment: .top, spacing: 10) {
+                        IslandMetric(title: "PACE", value: context.state.paceText, unit: "/mi", alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        IslandMetric(title: "TIME", value: context.state.elapsedText, unit: "", alignment: .center)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        IslandMetric(title: "DISTANCE", value: context.state.distanceText, unit: "mi", alignment: .trailing)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 8)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
@@ -51,6 +59,7 @@ struct RunLiveActivity: Widget {
                                 .foregroundStyle(.orange)
                         }
                     }
+                    .padding(.horizontal, 8)
                 }
             } compactLeading: {
                 Image(systemName: context.state.isOffRoute ? "exclamationmark.triangle.fill"
@@ -247,9 +256,12 @@ private struct IslandMetric: View {
     let title: String
     let value: String
     let unit: String
+    /// How the stacked title and value line up, so the same component can read
+    /// left, centre, or right depending on where it sits in the row.
+    var alignment: HorizontalAlignment = .leading
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: alignment, spacing: 2) {
             Text(title)
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.secondary)
