@@ -711,6 +711,14 @@ private struct ProfileScreen: View {
     @State private var heightFeet: String = ""
     @State private var heightInches: String = ""
     @State private var sex: BiologicalSex = .unspecified
+    @FocusState private var focusedField: Field?
+
+    /// The number pads carry no return key, so a Done button on a keyboard
+    /// toolbar is the only way to put the keyboard away. Tracking which field
+    /// holds focus lets that button dismiss whichever one is open.
+    private enum Field {
+        case weight, feet, inches
+    }
 
     var body: some View {
         ScrollView {
@@ -725,6 +733,7 @@ private struct ProfileScreen: View {
                         TextField("0", text: $weightPounds)
                             .keyboardType(.decimalPad)
                             .monospacedDigit()
+                            .focused($focusedField, equals: .weight)
                         Text("lb").foregroundStyle(.secondary)
                     }
                 }
@@ -734,10 +743,12 @@ private struct ProfileScreen: View {
                         TextField("0", text: $heightFeet)
                             .keyboardType(.numberPad)
                             .monospacedDigit()
+                            .focused($focusedField, equals: .feet)
                         Text("ft").foregroundStyle(.secondary)
                         TextField("0", text: $heightInches)
                             .keyboardType(.numberPad)
                             .monospacedDigit()
+                            .focused($focusedField, equals: .inches)
                         Text("in").foregroundStyle(.secondary)
                     }
                 }
@@ -761,9 +772,17 @@ private struct ProfileScreen: View {
             }
             .padding(20)
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Body profile")
         .navigationBarTitleDisplayMode(.inline)
         .tint(.mint)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+                    .fontWeight(.semibold)
+            }
+        }
         .onAppear(perform: loadFromProfile)
         .onChange(of: weightPounds) { _, _ in commit() }
         .onChange(of: heightFeet) { _, _ in commit() }
