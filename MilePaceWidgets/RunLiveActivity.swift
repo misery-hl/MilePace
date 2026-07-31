@@ -28,6 +28,11 @@ struct RunLiveActivity: Widget {
                         Label(context.state.elevationText, systemImage: "arrow.up.right")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if let calories = context.state.caloriesText {
+                            Label("\(calories) kcal", systemImage: "flame.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer()
                         if context.state.isOffRoute {
                             Label(context.state.offRouteText ?? "Off route",
@@ -112,7 +117,12 @@ private struct LockScreenView: View {
                 HStack(spacing: 0) {
                     LockScreenMetric(title: "DISTANCE", value: state.distanceText, unit: "mi")
                     LockScreenMetric(title: "TIME", value: state.elapsedText, unit: "")
-                    if !showsMap {
+                    // Calories take the third slot when there is one, because a
+                    // runner asked for them there. Climb keeps the slot only
+                    // when there is no calorie figure and no map.
+                    if let calories = state.caloriesText {
+                        LockScreenMetric(title: "CAL", value: calories, unit: "kcal")
+                    } else if !showsMap {
                         LockScreenMetric(title: "CLIMB", value: state.elevationText, unit: "")
                     }
                 }

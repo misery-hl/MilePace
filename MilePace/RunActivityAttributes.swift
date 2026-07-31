@@ -42,6 +42,9 @@ struct RunActivityAttributes: ActivityAttributes {
         /// How far the runner is from the route line, in metres. Shown instead
         /// of a turn instruction, so a glance says how far off, not what to do.
         var offRouteDistanceMeters: Double?
+        /// Estimated energy burned so far, in kilocalories. `nil` when the
+        /// runner has entered no weight, so the widget shows no calorie figure.
+        var caloriesKcal: Double?
 
         var distanceMiles: Double {
             distanceMeters / metersPerMile
@@ -74,6 +77,12 @@ struct RunActivityAttributes: ActivityAttributes {
 
         var distanceText: String {
             String(format: "%.2f", distanceMiles)
+        }
+
+        /// The calorie figure for the widget, or `nil` when there is none.
+        var caloriesText: String? {
+            guard let caloriesKcal, caloriesKcal.isFinite, caloriesKcal > 0 else { return nil }
+            return String(format: "%.0f", caloriesKcal)
         }
 
         var elevationText: String {

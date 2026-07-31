@@ -148,6 +148,102 @@ enum RunSource: String, Codable, Equatable {
     case healthKit
 }
 
+/// The runner's sex, as it affects a body calculation. `unspecified` lets a
+/// runner skip the question and still get a calorie estimate from their weight.
+enum BiologicalSex: String, Codable, CaseIterable, Identifiable, Equatable {
+    case female
+    case male
+    case unspecified
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .female: return "Female"
+        case .male: return "Male"
+        case .unspecified: return "Prefer not to say"
+        }
+    }
+}
+
+/// The runner's body figures, entered by hand and kept on the phone. They exist
+/// to estimate the energy a run burns. The estimate needs body weight; height
+/// and sex are kept for the profile and for a later, richer calculation.
+///
+/// Weight and height are held in metric units, because the science is metric.
+/// The profile screen accepts pounds and feet, and converts.
+struct UserProfile: Codable, Equatable {
+    var weightKilograms: Double?
+    var heightCentimeters: Double?
+    var biologicalSex: BiologicalSex
+
+    init(
+        weightKilograms: Double? = nil,
+        heightCentimeters: Double? = nil,
+        biologicalSex: BiologicalSex = .unspecified
+    ) {
+        self.weightKilograms = UserProfile.usablePositive(weightKilograms)
+        self.heightCentimeters = UserProfile.usablePositive(heightCentimeters)
+        self.biologicalSex = biologicalSex
+    }
+
+    /// Decodes leniently, so a profile written by a later version with more
+    /// fields, or an earlier one with fewer, keeps loading.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        weightKilograms = UserProfile.usablePositive(
+            try container.decodeIfPresent(Double.self, forKey: .weightKilograms))
+        heightCentimeters = UserProfile.usablePositive(
+            try container.decodeIfPresent(Double.self, forKey: .heightCentimeters))
+        biologicalSex = try container.decodeIfPresent(BiologicalSex.self, forKey: .biologicalSex) ?? .unspecified
+    }
+
+    /// True once the profile holds the one figure the calorie estimate needs.
+    var canEstimateEnergy: Bool {
+        weightKilograms != nil
+    }
+
+    private static func usablePositive(_ value: Double?) -> Double? {
+        guard let value, value.isFinite, value > 0 else { return nil }
+        return value
+    }
+}
+
+/// Estimates the energy a run burns, in kilocalories.
+///
+/// The estimate rests on the ACSM running equation. That equation predicts
+/// oxygen use from body weight and running speed, and body mass moves nearly
+/// all of the result. Height and sex change a running estimate very little
+/// without a heart rate and an age, which the phone does not have, so this
+/// function does not pretend to use them. The number is an estimate, and the
+/// app says so where it shows it.
+enum CalorieEstimator {
+    /// Kilocalories for one continuous effort. Returns `nil` when the profile
+    /// has no weight, or when the run is too short or too brief to score.
+    ///
+    /// The maths: oxygen use (mL per kg per minute) is `0.2 × speed + 3.5`,
+    /// where speed is metres per minute. One litre of oxygen releases about
+    /// five kilocalories. Multiply by body mass and by the minutes run.
+    static func kilocalories(
+        distanceMeters: Double,
+        duration: TimeInterval,
+        weightKilograms: Double?
+    ) -> Double? {
+        guard let weightKilograms, weightKilograms > 0,
+              distanceMeters > 0, duration > 0,
+              distanceMeters.isFinite, duration.isFinite else { return nil }
+
+        let minutes = duration / 60
+        let metresPerMinute = distanceMeters / minutes
+        let oxygenMlPerKgPerMin = 0.2 * metresPerMinute + 3.5
+        let litresPerMinute = oxygenMlPerKgPerMin * weightKilograms / 1_000
+        let kilocalories = litresPerMinute * 5 * minutes
+
+        guard kilocalories.isFinite, kilocalories > 0 else { return nil }
+        return kilocalories
+    }
+}
+
 struct RunRecord: Codable, Equatable, Identifiable {
     let id: UUID
     let startedAt: Date
@@ -401,6 +497,24 @@ struct RunRecord: Codable, Equatable, Identifiable {
 
     var fastestMile: MileSplit? {
         mileSplits.min(by: { $0.duration < $1.duration })
+    }
+
+    /// Whether the energy figure is the app's own estimate rather than a
+    /// measurement. A phone run has no way to measure energy, so its figure is
+    /// always an estimate. Apple Health supplies a measured figure.
+    var energyIsEstimated: Bool {
+        source == .phoneGPS
+    }
+
+    /// The energy figure as a labelled number, or `nil` when the record has
+    /// none. An older phone run saved before the estimate existed has none.
+    var energyMetric: ActivityMetric? {
+        guard let activeEnergyKcal else { return nil }
+        return ActivityMetric(
+            title: energyIsEstimated ? "CALORIES (EST.)" : "CALORIES",
+            value: String(format: "%.0f", activeEnergyKcal),
+            unit: "kcal"
+        )
     }
 
     var elevationGainFeet: Double {

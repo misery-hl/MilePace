@@ -34,8 +34,14 @@ final class RunTracker: NSObject, ObservableObject {
     private var lastUserPoint: RoutePoint?
     private var lastRouteDistance: Double?
 
+    /// Estimated energy for the run so far, in kilocalories. `nil` until the
+    /// runner has entered a weight, because the estimate cannot be made without
+    /// one. Shown live on the running screen and the Lock Screen.
+    @Published private(set) var currentCalories: Double?
+
     private let locationManager = CLLocationManager()
     private let store: RunStore
+    private let profileStore: ProfileStore
     private var accumulator = RunAccumulator()
     private var timer: Timer?
     private var pendingStart = false
@@ -88,8 +94,9 @@ final class RunTracker: NSObject, ObservableObject {
     /// ride out a tunnel or a tall building, short enough to matter.
     private let rejectionWarningDelay: TimeInterval = 30
 
-    init(store: RunStore) {
+    init(store: RunStore, profileStore: ProfileStore) {
         self.store = store
+        self.profileStore = profileStore
         authorizationStatus = locationManager.authorizationStatus
         super.init()
         locationManager.delegate = self
@@ -172,7 +179,15 @@ final class RunTracker: NSObject, ObservableObject {
             // is rewritten on every save.
             trackPoints: RouteThinning.thin(trackPoints),
             elevationGainMeters: accumulator.elevationGainMeters,
-            elevationLossMeters: accumulator.elevationLossMeters
+            elevationLossMeters: accumulator.elevationLossMeters,
+            // The phone cannot measure energy, so it stores its own estimate.
+            // It is `nil` when the runner has entered no weight, and the record
+            // then shows no calories rather than a wrong figure.
+            activeEnergyKcal: CalorieEstimator.kilocalories(
+                distanceMeters: accumulator.totalDistanceMeters,
+                duration: accumulatedActiveDuration,
+                weightKilograms: profileStore.profile.weightKilograms
+            )
         )
         store.save(record)
         lastRun = record
@@ -201,6 +216,11 @@ final class RunTracker: NSObject, ObservableObject {
         currentMileNumber = accumulator.currentMileNumber
         currentMileProgress = accumulator.currentMileProgress
         elevationGainMeters = accumulator.elevationGainMeters
+        currentCalories = CalorieEstimator.kilocalories(
+            distanceMeters: accumulator.totalDistanceMeters,
+            duration: currentElapsed,
+            weightKilograms: profileStore.profile.weightKilograms
+        )
 
         if phase == .running || phase == .paused {
             // Rate limited inside the controller, so calling this on every
@@ -240,7 +260,8 @@ final class RunTracker: NSObject, ObservableObject {
             goalName: goalName,
             goalDeltaSeconds: goalDelta,
             userPoint: followedRoute == nil ? nil : lastUserPoint,
-            offRouteDistanceMeters: isOffRoute ? lastRouteDistance : nil
+            offRouteDistanceMeters: isOffRoute ? lastRouteDistance : nil,
+            caloriesKcal: currentCalories
         )
     }
 
