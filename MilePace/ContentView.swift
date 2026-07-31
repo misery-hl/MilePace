@@ -118,6 +118,8 @@ private struct StartView: View {
 
                 CompactMetricPicker()
 
+                ProfileLink()
+
                 Label("Runs stay on this iPhone", systemImage: "lock.fill")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -408,6 +410,24 @@ private struct RunDashboardView: View {
                 MetricCard(title: "LIVE PACE", value: tracker.rollingPace?.paceText ?? "--:--", unit: "/mi")
             }
 
+            if let calories = tracker.currentCalories {
+                HStack {
+                    Label("Calories", systemImage: "flame.fill")
+                    Spacer()
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(Int(calories.rounded()))")
+                            .font(.title3.bold().monospacedDigit())
+                        Text("kcal")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding()
+                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Estimated calories \(Int(calories.rounded()))")
+            }
+
             if tracker.isOffRoute {
                 Label("Off route — you have strayed from the route you are following.",
                       systemImage: "exclamationmark.triangle.fill")
@@ -563,6 +583,22 @@ private struct RunDetailView: View {
                 .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
             }
 
+            if let energy = record.energyMetric {
+                HStack {
+                    Label(record.energyIsEstimated ? "Calories (estimated)" : "Calories",
+                          systemImage: "flame.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(energy.value) kcal")
+                        .font(.headline.monospacedDigit())
+                }
+                .padding()
+                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("\(record.energyIsEstimated ? "Estimated calories" : "Calories") \(energy.value)")
+            }
+
             if record.mileSplits.isEmpty {
                 // The prompt only makes sense while a mile is still reachable.
                 // An imported workout carries no splits and never gains any, so
@@ -621,7 +657,7 @@ private struct CompactMetricPicker: View {
             }
             .pickerStyle(.segmented)
 
-            Text("The collapsed island fits one figure. The Lock Screen shows pace, distance, time, and climb.")
+            Text("The collapsed island fits one figure. The Lock Screen shows pace, distance, time, and calories.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -629,6 +665,178 @@ private struct CompactMetricPicker: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+/// The start-screen row that opens the body profile. It shows the weight at a
+/// glance when one is set, so a runner can see the estimate has what it needs.
+private struct ProfileLink: View {
+    @EnvironmentObject private var profileStore: ProfileStore
+
+    var body: some View {
+        NavigationLink {
+            ProfileScreen()
+        } label: {
+            HStack {
+                Label("Body profile", systemImage: "figure.stand")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var summary: String {
+        guard let weight = profileStore.profile.weightKilograms else { return "Set up" }
+        return "\(Int((weight / poundsToKilograms).rounded())) lb"
+    }
+}
+
+/// Where a runner enters weight, height, and sex. Weight drives the calorie
+/// estimate, so the screen puts it first and says why it matters. The values
+/// are held in metric units and shown in US units, because the app states
+/// distance in miles.
+private struct ProfileScreen: View {
+    @EnvironmentObject private var profileStore: ProfileStore
+
+    @State private var weightPounds: String = ""
+    @State private var heightFeet: String = ""
+    @State private var heightInches: String = ""
+    @State private var sex: BiologicalSex = .unspecified
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("MilePace estimates the calories a run burns from your weight and your pace. Your profile stays on this iPhone.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                field(title: "WEIGHT", footer: "Drives the calorie estimate.") {
+                    HStack {
+                        TextField("0", text: $weightPounds)
+                            .keyboardType(.decimalPad)
+                            .monospacedDigit()
+                        Text("lb").foregroundStyle(.secondary)
+                    }
+                }
+
+                field(title: "HEIGHT", footer: "Kept for your profile. It changes a running estimate very little.") {
+                    HStack(spacing: 12) {
+                        TextField("0", text: $heightFeet)
+                            .keyboardType(.numberPad)
+                            .monospacedDigit()
+                        Text("ft").foregroundStyle(.secondary)
+                        TextField("0", text: $heightInches)
+                            .keyboardType(.numberPad)
+                            .monospacedDigit()
+                        Text("in").foregroundStyle(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SEX")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                        .tracking(1.2)
+                    Picker("Sex", selection: $sex) {
+                        ForEach(BiologicalSex.allCases) { option in
+                            Text(shortName(option)).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Label("Your weight, height, and sex never leave this iPhone.", systemImage: "lock.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(20)
+        }
+        .navigationTitle("Body profile")
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(.mint)
+        .onAppear(perform: loadFromProfile)
+        .onChange(of: weightPounds) { _, _ in commit() }
+        .onChange(of: heightFeet) { _, _ in commit() }
+        .onChange(of: heightInches) { _, _ in commit() }
+        .onChange(of: sex) { _, _ in commit() }
+    }
+
+    @ViewBuilder
+    private func field<Content: View>(
+        title: String,
+        footer: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+                .tracking(1.2)
+            content()
+                .font(.title3.bold())
+                .padding()
+                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            Text(footer)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func shortName(_ sex: BiologicalSex) -> String {
+        switch sex {
+        case .female: return "Female"
+        case .male: return "Male"
+        case .unspecified: return "Skip"
+        }
+    }
+
+    private func loadFromProfile() {
+        let profile = profileStore.profile
+        if let kg = profile.weightKilograms {
+            weightPounds = String(Int((kg / poundsToKilograms).rounded()))
+        }
+        if let cm = profile.heightCentimeters {
+            let totalInches = Int((cm / centimetresPerInch).rounded())
+            heightFeet = String(totalInches / 12)
+            heightInches = String(totalInches % 12)
+        }
+        sex = profile.biologicalSex
+    }
+
+    /// Parses the US-unit fields and writes the profile back in metric units.
+    /// An empty or unparseable field becomes `nil`, so clearing the weight
+    /// turns the estimate off rather than freezing the last value.
+    private func commit() {
+        let kilograms = Double(weightPounds.trimmingCharacters(in: .whitespaces))
+            .map { $0 * poundsToKilograms }
+
+        let feet = Double(heightFeet.trimmingCharacters(in: .whitespaces)) ?? 0
+        let inches = Double(heightInches.trimmingCharacters(in: .whitespaces)) ?? 0
+        let totalInches = feet * 12 + inches
+        let centimetres = totalInches > 0 ? totalInches * centimetresPerInch : nil
+
+        profileStore.profile = UserProfile(
+            weightKilograms: kilograms,
+            heightCentimeters: centimetres,
+            biologicalSex: sex
+        )
+    }
+}
+
+private let poundsToKilograms = 0.453_592_37
+private let centimetresPerInch = 2.54
 
 private struct GoalsSection: View {
     @EnvironmentObject private var goalStore: GoalStore

@@ -91,3 +91,46 @@ final class RunStore: ObservableObject {
         }
     }
 }
+
+/// Holds the runner's body profile on the phone. It follows `RunStore`: one
+/// small JSON file in Application Support, written atomically. The profile is a
+/// single value, so it is read and rewritten whole.
+@MainActor
+final class ProfileStore: ObservableObject {
+    @Published var profile: UserProfile = UserProfile() {
+        didSet {
+            guard profile != oldValue else { return }
+            persist()
+        }
+    }
+
+    private let fileURL: URL
+
+    init(fileURL: URL? = nil) {
+        if let fileURL {
+            self.fileURL = fileURL
+        } else {
+            let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("MilePace", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            self.fileURL = directory.appendingPathComponent("profile.json")
+        }
+        load()
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: fileURL),
+              let decoded = try? JSONDecoder().decode(UserProfile.self, from: data) else { return }
+        // Assign to the backing value directly so loading does not immediately
+        // write the file back out.
+        _profile = Published(initialValue: decoded)
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(profile) else { return }
+        let destination = fileURL
+        Task.detached(priority: .utility) {
+            try? data.write(to: destination, options: .atomic)
+        }
+    }
+}
