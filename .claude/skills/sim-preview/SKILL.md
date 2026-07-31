@@ -37,8 +37,13 @@ Copy the app sources and the `.xcodeproj`; nothing else is needed.
 ```sh
 SP=<scratchpad>/probe
 rm -rf "$SP" && mkdir -p "$SP"
-cp -R "<project>/MilePace" "<project>/MilePace.xcodeproj" "$SP/"
+cp -R "<project>/MilePace" "<project>/MilePaceWidgets" "<project>/MilePace.xcodeproj" "$SP/"
 ```
+
+Copy **every** target's source directory, not only the app's. The project
+builds an app and a widget extension, and the widget's `Info.plist` is a build
+input. A copy that omits `MilePaceWidgets` fails the build with "Build input
+file cannot be found". If a new target appears later, add its directory here.
 
 ### 2. Patch the copy to open on the target screen
 
