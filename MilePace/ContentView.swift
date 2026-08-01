@@ -15,173 +15,196 @@ struct ContentView: View {
     @State private var showProfileIntro = false
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black.ignoresSafeArea()
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-                switch tracker.phase {
-                case .idle:
-                    StartView()
-                case .running, .paused:
-                    RunDashboardView()
-                case .finished:
-                    RunSummaryView(record: tracker.lastRun)
-                }
+            switch tracker.phase {
+            case .idle:
+                // When no run is active, the app is a browser: a tab bar for
+                // starting a run, routes, past runs, and settings. A run itself
+                // takes the whole screen, the way Strava's record screen does.
+                HomeTabs()
+            case .running, .paused:
+                NavigationStack { RunDashboardView() }
+            case .finished:
+                NavigationStack { RunSummaryView(record: tracker.lastRun) }
             }
-            .tint(.mint)
-            .sheet(isPresented: $showProfileIntro, onDismiss: { hasSeenProfileIntro = true }) {
-                ProfileIntroView()
+        }
+        .tint(.mint)
+        .sheet(isPresented: $showProfileIntro, onDismiss: { hasSeenProfileIntro = true }) {
+            ProfileIntroView()
+        }
+        .onAppear {
+            // Only on a genuine first launch, and never over a run in
+            // progress, which cannot happen on first launch but is cheap to
+            // guard.
+            if !hasSeenProfileIntro, tracker.phase == .idle {
+                showProfileIntro = true
             }
-            .onAppear {
-                // Only on a genuine first launch, and never over a run in
-                // progress, which cannot happen on first launch but is cheap to
-                // guard.
-                if !hasSeenProfileIntro, tracker.phase == .idle {
-                    showProfileIntro = true
-                }
-            }
-            // A brief signal drop is not a permission problem. One title for
-            // both made a passing glitch read as though access had been lost.
-            .alert(tracker.authorizationStatus == .denied
-                   ? "MilePace needs GPS"
-                   : "GPS signal problem",
-                   isPresented: Binding(
-                get: { tracker.errorMessage != nil },
-                set: { if !$0 { tracker.errorMessage = nil } }
-            )) {
-                if tracker.authorizationStatus == .denied {
-                    Button("Open Settings") {
-                        if let url = URL(string: UIApplication.openSettingsURLString) {
-                            UIApplication.shared.open(url)
-                        }
+        }
+        // A brief signal drop is not a permission problem. One title for
+        // both made a passing glitch read as though access had been lost.
+        .alert(tracker.authorizationStatus == .denied
+               ? "MilePace needs GPS"
+               : "GPS signal problem",
+               isPresented: Binding(
+            get: { tracker.errorMessage != nil },
+            set: { if !$0 { tracker.errorMessage = nil } }
+        )) {
+            if tracker.authorizationStatus == .denied {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
                     }
                 }
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(tracker.errorMessage ?? "")
             }
-            .alert("Run history problem", isPresented: Binding(
-                get: { store.storageError != nil },
-                set: { if !$0 { store.storageError = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(store.storageError ?? "")
-            }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(tracker.errorMessage ?? "")
+        }
+        .alert("Run history problem", isPresented: Binding(
+            get: { store.storageError != nil },
+            set: { if !$0 { store.storageError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(store.storageError ?? "")
         }
     }
 }
 
-private struct StartView: View {
-    @EnvironmentObject private var tracker: RunTracker
-    @EnvironmentObject private var store: RunStore
-
+/// The tab bar shown when no run is active. Each tab owns its own navigation
+/// stack, so a push in one tab does not disturb another.
+private struct HomeTabs: View {
     var body: some View {
-        ScrollView {
-            VStack(spacing: 28) {
-                Spacer(minLength: 36)
-
-                Image(systemName: "figure.run.circle.fill")
-                    .font(.system(size: 76))
-                    .foregroundStyle(.mint)
-
-                VStack(spacing: 8) {
-                    Text("MilePace")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-                    Text("Your pace. Your miles. No subscription.")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                Button(action: tracker.start) {
-                    Label("Start Run", systemImage: "location.fill")
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(.mint, in: RoundedRectangle(cornerRadius: 22))
-                        .foregroundStyle(.black)
-                }
-                .accessibilityHint("Starts GPS tracking")
-
-                if let route = tracker.followedRoute {
-                    HStack(spacing: 10) {
-                        Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
-                            .foregroundStyle(.mint)
-                        Text("Following \(route.displayName)")
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                        Spacer()
-                        Button {
-                            tracker.followedRoute = nil
-                        } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                        }
-                        .accessibilityLabel("Stop following this route")
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-                }
-
-                if tracker.usesReducedAccuracy {
-                    Label("Precise Location is off, so pace may be less accurate.", systemImage: "location.slash")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
-
-                GoalsSection()
-
-                RoutesSection()
-
-                CompactMetricPicker()
-
-                ProfileLink()
-
-                Label("Runs stay on this iPhone", systemImage: "lock.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                if !store.visibleRecords.isEmpty {
-                    recentRuns
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 30)
+        TabView {
+            RunTab()
+                .tabItem { Label("Run", systemImage: "figure.run") }
+            RoutesTab()
+                .tabItem { Label("Routes", systemImage: "map") }
+            RunsTab()
+                .tabItem { Label("Runs", systemImage: "figure.run.square.stack") }
+            SettingsTab()
+                .tabItem { Label("Settings", systemImage: "gearshape") }
         }
     }
+}
 
-    private var recentRuns: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("RECENT RUNS")
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-                .tracking(1.2)
+/// The Run tab: the hero, the Start Run button, any route being followed, and
+/// the goals. Everything needed to begin a run, and nothing that belongs to
+/// browsing past runs.
+private struct RunTab: View {
+    @EnvironmentObject private var tracker: RunTracker
 
-            ForEach(store.visibleRecords.prefix(5)) { record in
-                RunRowLink(record: record)
-            }
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 28) {
+                    Spacer(minLength: 24)
 
-            if store.visibleRecords.count > 5 || !store.archivedRecords.isEmpty {
-                NavigationLink {
-                    AllRunsScreen()
-                } label: {
-                    HStack {
-                        Text("See all \(store.visibleRecords.count) runs")
-                        Spacer()
-                        Image(systemName: "chevron.right")
+                    Image(systemName: "figure.run.circle.fill")
+                        .font(.system(size: 76))
+                        .foregroundStyle(.mint)
+
+                    VStack(spacing: 8) {
+                        Text("MilePace")
+                            .font(.system(size: 42, weight: .bold, design: .rounded))
+                        Text("Your pace. Your miles. No subscription.")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.vertical, 14)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity)
-                    .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+
+                    Button(action: tracker.start) {
+                        Label("Start Run", systemImage: "location.fill")
+                            .font(.title2.bold())
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .background(.mint, in: RoundedRectangle(cornerRadius: 22))
+                            .foregroundStyle(.black)
+                    }
+                    .accessibilityHint("Starts GPS tracking")
+
+                    if let route = tracker.followedRoute {
+                        HStack(spacing: 10) {
+                            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                                .foregroundStyle(.mint)
+                            Text("Following \(route.displayName)")
+                                .font(.subheadline.weight(.semibold))
+                                .lineLimit(1)
+                            Spacer()
+                            Button {
+                                tracker.followedRoute = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel("Stop following this route")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                    }
+
+                    if tracker.usesReducedAccuracy {
+                        Label("Precise Location is off, so pace may be less accurate.", systemImage: "location.slash")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+
+                    GoalsSection()
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 30)
             }
+            .background(Color.black)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 10)
+    }
+}
+
+/// The Routes tab: build a route, or pick a saved one to follow.
+private struct RoutesTab: View {
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                RoutesSection()
+                    .padding(20)
+            }
+            .background(Color.black)
+            .navigationTitle("Routes")
+        }
+    }
+}
+
+/// The Runs tab: the full run history.
+private struct RunsTab: View {
+    var body: some View {
+        NavigationStack {
+            AllRunsScreen()
+        }
+    }
+}
+
+/// The Settings tab: the small preferences that used to sit at the bottom of
+/// the home screen — the Dynamic Island figure and the body profile.
+private struct SettingsTab: View {
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    CompactMetricPicker()
+
+                    ProfileLink()
+
+                    Label("Runs stay on this iPhone", systemImage: "lock.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(20)
+            }
+            .background(Color.black)
+            .navigationTitle("Settings")
+        }
     }
 }
 
@@ -293,6 +316,21 @@ private struct AllRunsScreen: View {
             Color.black.ignoresSafeArea()
             ScrollView {
                 LazyVStack(spacing: 12) {
+                    if store.visibleRecords.isEmpty && store.archivedRecords.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "figure.run.circle")
+                                .font(.system(size: 52))
+                                .foregroundStyle(.secondary)
+                            Text("No runs yet")
+                                .font(.headline)
+                            Text("Your finished runs will appear here.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 80)
+                    }
+
                     ForEach(store.visibleRecords) { record in
                         RunRowLink(record: record)
                     }
@@ -322,7 +360,7 @@ private struct AllRunsScreen: View {
                 .padding(20)
             }
         }
-        .navigationTitle("All runs")
+        .navigationTitle("Runs")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
