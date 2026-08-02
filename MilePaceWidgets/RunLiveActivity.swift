@@ -14,43 +14,57 @@ struct RunLiveActivity: Widget {
                 .activitySystemActionForegroundColor(.mint)
         } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) {
-                    IslandMetric(title: "PACE", value: context.state.paceText, unit: "/mi")
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    IslandMetric(title: "DISTANCE", value: context.state.distanceText, unit: "mi")
-                }
-                DynamicIslandExpandedRegion(.center) {
-                    IslandMetric(title: "TIME", value: context.state.elapsedText, unit: "")
-                }
+                // Everything lives in the bottom region, not spread across
+                // leading, center, and trailing, and not in center alone. The
+                // center region sits between the camera gutters and is not
+                // guaranteed the island's full width, so a row placed there can
+                // still be narrower than it looks and clip a label at the
+                // rounded corners. The bottom region is always the island's
+                // full width and always clear of the camera, so it is the only
+                // region that reliably keeps three columns aligned on one
+                // baseline with no clipping. The metrics sit above the
+                // elevation/calories/goal accessory row, both inside the same
+                // full-width container and padding.
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack {
-                        Label(context.state.elevationText, systemImage: "arrow.up.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        if let calories = context.state.caloriesText {
-                            Label("\(calories) kcal", systemImage: "flame.fill")
+                    VStack(spacing: 12) {
+                        HStack(alignment: .top, spacing: 0) {
+                            IslandMetric(title: "PACE", value: context.state.paceText, unit: "/mi", alignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            IslandMetric(title: "TIME", value: context.state.elapsedText, unit: "", alignment: .center)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                            IslandMetric(title: "DISTANCE", value: context.state.distanceText, unit: "mi", alignment: .trailing)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+
+                        HStack {
+                            Label(context.state.elevationText, systemImage: "arrow.up.right")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if context.state.isOffRoute {
-                            Label(context.state.offRouteText ?? "Off route",
-                                  systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.orange)
-                        } else if let goalDelta = context.state.goalDeltaText {
-                            Text(goalDelta)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(
-                                    (context.state.goalDeltaSeconds ?? 0) <= 0 ? .mint : .orange
-                                )
-                        } else if context.state.isPaused {
-                            Text("Paused")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.orange)
+                            if let calories = context.state.caloriesText {
+                                Label("\(calories) kcal", systemImage: "flame.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if context.state.isOffRoute {
+                                Label(context.state.offRouteText ?? "Off route",
+                                      systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.orange)
+                            } else if let goalDelta = context.state.goalDeltaText {
+                                Text(goalDelta)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(
+                                        (context.state.goalDeltaSeconds ?? 0) <= 0 ? .mint : .orange
+                                    )
+                            } else if context.state.isPaused {
+                                Text("Paused")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.orange)
+                            }
                         }
                     }
+                    .padding(.horizontal, 16)
                 }
             } compactLeading: {
                 Image(systemName: context.state.isOffRoute ? "exclamationmark.triangle.fill"
@@ -247,9 +261,12 @@ private struct IslandMetric: View {
     let title: String
     let value: String
     let unit: String
+    /// How the stacked title and value line up, so the same component can read
+    /// left, centre, or right depending on where it sits in the row.
+    var alignment: HorizontalAlignment = .leading
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: alignment, spacing: 2) {
             Text(title)
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.secondary)
