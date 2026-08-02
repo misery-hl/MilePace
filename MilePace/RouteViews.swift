@@ -313,13 +313,12 @@ struct RoutesSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("ROUTES")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                    .tracking(1.2)
-                Spacer()
-                if !routeStore.routes.isEmpty {
+            // The Routes tab already titles the screen, so no section label is
+            // needed here. The New button keeps its own row when there are
+            // routes to sit above.
+            if !routeStore.routes.isEmpty {
+                HStack {
+                    Spacer()
                     Button { isBuilding = true } label: {
                         Label("New", systemImage: "plus").font(.caption.bold())
                     }
