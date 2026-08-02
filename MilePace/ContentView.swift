@@ -591,10 +591,14 @@ private struct RunSummaryView: View {
                     .font(.largeTitle.bold())
 
                 if let record {
+                    // The recap and the share button come first, then the map,
+                    // then the "add to" actions. A runner wants to see how the
+                    // run went before deciding to file it against a goal or save
+                    // its path.
+                    RunDetailView(record: record, showsDate: false, mapAtBottom: true)
                     GoalApplyView(record: record)
                     RouteSuggestionCard(record: record)
                     AddToRoutesButton(record: record)
-                    RunDetailView(record: record, showsDate: false)
                 }
             }
             .padding(20)
@@ -647,6 +651,10 @@ private struct RunSummaryView: View {
 private struct RunDetailView: View {
     let record: RunRecord
     var showsDate = true
+    /// Draws the route map after the figures and the share button, rather than
+    /// before them. The post-run summary leads with the numbers a runner wants
+    /// first; the saved-run detail leads with the map.
+    var mapAtBottom = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -656,7 +664,7 @@ private struct RunDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if record.hasRoute {
+            if record.hasRoute && !mapAtBottom {
                 RouteMapView(record: record)
             }
 
@@ -726,6 +734,10 @@ private struct RunDetailView: View {
             }
 
             RunShareButton(record: record)
+
+            if record.hasRoute && mapAtBottom {
+                RouteMapView(record: record)
+            }
         }
         .navigationTitle(record.activityKind.displayName)
         .navigationBarTitleDisplayMode(.inline)
