@@ -575,7 +575,11 @@ private struct RunDashboardView: View {
 
 private struct RunSummaryView: View {
     @EnvironmentObject private var tracker: RunTracker
+    @EnvironmentObject private var store: RunStore
+    @EnvironmentObject private var goalStore: GoalStore
     let record: RunRecord?
+
+    @State private var isConfirmingDelete = false
 
     var body: some View {
         ScrollView {
@@ -583,23 +587,63 @@ private struct RunSummaryView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 62))
                     .foregroundStyle(.mint)
-                Text("Run saved")
+                Text("Run complete")
                     .font(.largeTitle.bold())
 
                 if let record {
+                    // The recap and the share button come first, then the map,
+                    // then the "add to" actions. A runner wants to see how the
+                    // run went before deciding to file it against a goal or save
+                    // its path.
+                    RunDetailView(record: record, showsDate: false, mapAtBottom: true)
                     GoalApplyView(record: record)
                     RouteSuggestionCard(record: record)
-                    RunDetailView(record: record, showsDate: false)
+                    AddToRoutesButton(record: record)
                 }
-
-                Button("Done", action: tracker.dismissSummary)
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(.mint, in: RoundedRectangle(cornerRadius: 18))
-                    .foregroundStyle(.black)
             }
             .padding(20)
+        }
+        // Save and Delete stay pinned to the bottom, so the choice is there the
+        // moment the run ends, without scrolling past the whole summary first.
+        .safeAreaInset(edge: .bottom) {
+            HStack(spacing: 12) {
+                Button(role: .destructive) {
+                    isConfirmingDelete = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
+                        .foregroundStyle(.red)
+                }
+
+                Button(action: tracker.dismissSummary) {
+                    Label("Save", systemImage: "checkmark")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.mint, in: RoundedRectangle(cornerRadius: 18))
+                        .foregroundStyle(.black)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+            .background(.black)
+        }
+        .alert("Delete this run?", isPresented: $isConfirmingDelete) {
+            Button("Delete run", role: .destructive) {
+                if let record {
+                    // Detach first, so no goal is left counting a run that is gone.
+                    goalStore.detachFromAllGoals(runID: record.id)
+                    store.delete(record)
+                }
+                tracker.dismissSummary()
+            }
+            Button("Keep run", role: .cancel) {}
+        } message: {
+            Text("This run will be deleted for good. Its distance, pace, and route will be lost, and this cannot be undone.")
         }
     }
 }
@@ -607,6 +651,10 @@ private struct RunSummaryView: View {
 private struct RunDetailView: View {
     let record: RunRecord
     var showsDate = true
+    /// Draws the route map after the figures and the share button, rather than
+    /// before them. The post-run summary leads with the numbers a runner wants
+    /// first; the saved-run detail leads with the map.
+    var mapAtBottom = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -616,7 +664,7 @@ private struct RunDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if record.hasRoute {
+            if record.hasRoute && !mapAtBottom {
                 RouteMapView(record: record)
             }
 
@@ -686,6 +734,10 @@ private struct RunDetailView: View {
             }
 
             RunShareButton(record: record)
+
+            if record.hasRoute && mapAtBottom {
+                RouteMapView(record: record)
+            }
         }
         .navigationTitle(record.activityKind.displayName)
         .navigationBarTitleDisplayMode(.inline)

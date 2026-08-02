@@ -627,6 +627,50 @@ struct RunAgainButton: View {
     }
 }
 
+/// Saves the run's own path to Routes, and does nothing else. Unlike "Run this
+/// route again", it does not start following the route: a runner who just
+/// finished does not want to be set up to run the same thing next time; they
+/// just want to keep the path for later.
+///
+/// Renders nothing when the run has no route to save, or when the repeated-run
+/// suggestion card is already offering the same thing, so callers can drop it
+/// in unconditionally.
+struct AddToRoutesButton: View {
+    let record: RunRecord
+
+    @EnvironmentObject private var routeStore: RouteStore
+    @EnvironmentObject private var store: RunStore
+    @State private var saved = false
+
+    private var suggestionCovers: Bool {
+        routeStore.suggestsRoutes
+            && RouteSuggestion.shouldSuggest(
+                for: record,
+                existingRoutes: routeStore.routes,
+                history: store.records
+            )
+    }
+
+    var body: some View {
+        if record.hasRoute && !suggestionCovers {
+            Button {
+                routeStore.add(PlannedRoute(fromRun: record))
+                saved = true
+            } label: {
+                Label(saved ? "Added to Routes" : "Add to Routes",
+                      systemImage: saved ? "checkmark.circle.fill" : "map")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(.mint.opacity(saved ? 0.12 : 0.18), in: RoundedRectangle(cornerRadius: 18))
+                    .foregroundStyle(.mint)
+            }
+            .disabled(saved)
+            .accessibilityHint("Saves this run's path to your routes. It does not start following it.")
+        }
+    }
+}
+
 /// Offered after a run the runner has done before but not saved: turn it into a
 /// route. Renders nothing when it does not apply, or when suggestions are off,
 /// so callers can drop it in unconditionally.
